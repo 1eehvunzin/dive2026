@@ -2,7 +2,7 @@ import type { Company } from "@/lib/mock-data"
 import { formatKrwMillion, formatPercent } from "@/lib/format"
 
 export const API_BASE_URL = (
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000"
+  process.env.NEXT_PUBLIC_API_BASE_URL || "https://dive2026.onrender.com"
 ).replace(/\/+$/, "")
 
 export type ReviewStatus = "draft" | "reviewed" | "active"
