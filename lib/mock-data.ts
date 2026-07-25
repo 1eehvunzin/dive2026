@@ -13,9 +13,9 @@ export type Program = {
 
 export type FinancialPoint = {
   year: string
-  revenue: number
-  operatingProfit: number
-  employees: number
+  revenue: number | null
+  operatingProfit: number | null
+  employees: number | null
 }
 
 export type ScoreBreakdown = {
@@ -29,14 +29,11 @@ export type Company = {
   name: string
   logoSeed: string
   industry: string
-  stage: string
   location: string
   founded: number
   employees: number
-  matchScore: number
-  fundingTotal: string
-  lastRoundValuation: string
-  ceo: string
+  supportTotal: string
+  financialUnit: "억원" | "백만원"
   oneLiner: string
   tags: string[]
   scoreBreakdown: ScoreBreakdown[]
@@ -45,10 +42,10 @@ export type Company = {
   financials: FinancialPoint[]
   patents: number
   certifications: string[]
-  creditGrade: string
-  debtRatio: number
-  currentRatio: number
-  /** 현재 자금 소진 속도 기준 잔여 개월 수. 최근 회계연도 흑자 전환 등으로 해당 없음이면 null. */
+  creditGrade: string | null
+  debtRatio: number | null
+  currentRatio: number | null
+  /** null은 '흑자 지속'이 아니라 원천 필드 부재/산출 불가를 뜻한다. */
   runwayMonths: number | null
   report: {
     summary: string
@@ -58,11 +55,24 @@ export type Company = {
     finance: string
   }
   /** 동종 업종 내 백분위 (선택적 — 백엔드 리포트 API 연동 후 채워짐) */
-  survivalPercentiles?: { label: string; pctl: number; cohortLabel?: string }[]
+  survivalPercentiles?: {
+    label: string
+    pctl: number
+    cohortLabel?: string
+    /** 원 지표값이 클수록 유리한지 여부. 부채비율 등은 false. */
+    higherIsBetter?: boolean
+  }[]
   /** 지원 이력 타임라인 (선택적) */
   supportHistory?: { year: number; program: string; amount: number }[]
   /** 업종 평균 대비 벤치마크 (선택적) */
-  industryBenchmarks?: { label: string; company: number; industry: number; unit: string }[]
+  industryBenchmarks?: {
+    label: string
+    company: number
+    industry: number
+    unit: string
+    /** 원 지표값이 클수록 유리한지 여부. 비교색의 의미를 결정한다. */
+    higherIsBetter?: boolean
+  }[]
 }
 
 export const programs: Program[] = [
@@ -87,14 +97,11 @@ export const companies: Company[] = [
     name: "님버스에이아이",
     logoSeed: "N",
     industry: "제조 AI · 예지보전",
-    stage: "Series A",
     location: "경기 성남",
     founded: 2021,
     employees: 48,
-    matchScore: 94,
-    fundingTotal: "82억 원",
-    lastRoundValuation: "520억 원",
-    ceo: "김하늘",
+    supportTotal: "1억 원",
+    financialUnit: "억원",
     oneLiner: "설비 센서 데이터를 실시간 분석해 고장을 예측하는 산업용 예지보전 AI 플랫폼",
     tags: ["제조 AI", "예지보전", "B2B SaaS", "엣지컴퓨팅"],
     scoreBreakdown: [
@@ -114,16 +121,16 @@ export const companies: Company[] = [
       "해외 진출 초기 단계로 글로벌 레퍼런스 부족",
     ],
     financials: [
-      { year: "2022", revenue: 12, operatingProfit: -8, employees: 14 },
-      { year: "2023", revenue: 34, operatingProfit: -5, employees: 27 },
-      { year: "2024", revenue: 78, operatingProfit: 4, employees: 39 },
-      { year: "2025", revenue: 142, operatingProfit: 21, employees: 48 },
+      { year: "2021", revenue: 12, operatingProfit: -8, employees: 14 },
+      { year: "2022", revenue: 34, operatingProfit: -5, employees: 27 },
+      { year: "2023", revenue: 78, operatingProfit: 4, employees: 39 },
+      { year: "2024", revenue: 142, operatingProfit: 21, employees: 48 },
     ],
     patents: 7,
     certifications: ["벤처기업 인증", "기업부설연구소", "ISO 27001"],
-    creditGrade: "AA-",
+    creditGrade: null,
     debtRatio: 45,
-    currentRatio: 210,
+    currentRatio: null,
     runwayMonths: null,
     report: {
       summary:
@@ -133,9 +140,9 @@ export const companies: Company[] = [
       technology:
         "자체 개발한 경량 이상탐지 모델을 엣지 디바이스에서 구동해 네트워크 지연 없이 실시간 추론이 가능하다. 설비 유형별 사전학습 모델 라이브러리를 보유해 신규 고객 온보딩 기간을 평균 6주에서 2주로 단축했다.",
       team:
-        "CEO 김하늘은 대형 제조사 스마트팩토리 팀 출신으로 현장 도메인 이해도가 높다. 핵심 연구진의 70%가 석·박사급이며, 산업 AI 분야 평균 경력 9년을 보유하고 있다.",
+        "최근 고용 인원은 48명이다. 대표자 이력과 학력·경력 구성은 현재 원천데이터에 없어 평가하지 않는다.",
       finance:
-        "2025년 매출 142억 원, 영업이익 21억 원으로 흑자 전환에 성공했다. 순현금 흐름이 개선되고 있으며, 현재 런웨이는 약 28개월로 추정된다. 매출총이익률은 78% 수준으로 SaaS 업계 상위권이다.",
+        "2024년 매출 142억 원, 영업이익 21억 원이다. 유동비율·현금흐름·자금 런웨이는 원천 필드가 없어 판단할 수 없다.",
     },
     survivalPercentiles: [
       { label: "매출 규모", pctl: 72, cohortLabel: "소프트웨어개발 소기업 (n=214)" },
@@ -160,14 +167,11 @@ export const companies: Company[] = [
     name: "버던트바이오",
     logoSeed: "V",
     industry: "바이오 · 대체단백",
-    stage: "Series B",
     location: "대전 유성",
     founded: 2019,
     employees: 76,
-    matchScore: 89,
-    fundingTotal: "210억 원",
-    lastRoundValuation: "1,400억 원",
-    ceo: "이서준",
+    supportTotal: "7천만 원",
+    financialUnit: "억원",
     oneLiner: "정밀발효 기술로 동물성 단백질을 대체하는 지속가능 식품소재 개발 기업",
     tags: ["바이오", "정밀발효", "푸드테크", "ESG"],
     scoreBreakdown: [
@@ -187,17 +191,17 @@ export const companies: Company[] = [
       "규제 승인 일정에 따라 상용화 시점 변동 가능성",
     ],
     financials: [
-      { year: "2022", revenue: 8, operatingProfit: -22, employees: 41 },
-      { year: "2023", revenue: 19, operatingProfit: -28, employees: 58 },
-      { year: "2024", revenue: 41, operatingProfit: -19, employees: 69 },
-      { year: "2025", revenue: 73, operatingProfit: -9, employees: 76 },
+      { year: "2021", revenue: 8, operatingProfit: -22, employees: 41 },
+      { year: "2022", revenue: 19, operatingProfit: -28, employees: 58 },
+      { year: "2023", revenue: 41, operatingProfit: -19, employees: 69 },
+      { year: "2024", revenue: 73, operatingProfit: -9, employees: 76 },
     ],
     patents: 12,
     certifications: ["벤처기업 인증", "이노비즈", "기업부설연구소"],
-    creditGrade: "BBB+",
+    creditGrade: null,
     debtRatio: 92,
-    currentRatio: 155,
-    runwayMonths: 20,
+    currentRatio: null,
+    runwayMonths: null,
     report: {
       summary:
         "버던트바이오는 정밀발효 기술을 활용해 동물성 단백질을 대체하는 식품소재를 개발한다. 지속가능성과 식량안보라는 거대 트렌드에 부합하며, 국내외 식품 대기업과의 공동개발을 통해 상용화 경로를 구축하고 있다.",
@@ -206,9 +210,9 @@ export const companies: Company[] = [
       technology:
         "고효율 균주 스크리닝 플랫폼과 발효 공정 최적화 노하우를 결합해 경쟁사 대비 높은 수율을 달성했다. 12건의 특허로 핵심 공정을 보호하고 있다.",
       team:
-        "CEO 이서준은 바이오 벤처 연쇄창업가로, R&D와 사업개발을 동시에 이끌어온 경험이 있다. 발효공학·식품과학 전문 인력이 두텁게 포진해 있다.",
+        "최근 고용 인원은 76명이다. 대표자 이력과 인력의 학력·경력 구성은 현재 원천데이터에 없어 평가하지 않는다.",
       finance:
-        "2025년 매출 73억 원으로 성장 중이나 아직 영업적자 단계다. 대규����� 설비 투자가 진행 중이어서 추가 자금조달이 예정되어 있으며, 손익분기점은 2027년으로 전망된다.",
+        "2024년 매출 73억 원, 영업손실 9억 원이다. 유동비율·현금흐름·자금 런웨이는 원천 필드가 없어 별도 확인이 필요하다.",
     },
   },
   {
@@ -216,14 +220,11 @@ export const companies: Company[] = [
     name: "루프모빌리티",
     logoSeed: "L",
     industry: "모빌리티 · 물류로봇",
-    stage: "Series A",
     location: "서울 강남",
     founded: 2020,
     employees: 61,
-    matchScore: 85,
-    fundingTotal: "150억 원",
-    lastRoundValuation: "900억 원",
-    ceo: "박도윤",
+    supportTotal: "5천만 원",
+    financialUnit: "억원",
     oneLiner: "실내 물류센터용 자율주행 운반로봇과 관제 소프트웨어를 공급하는 물류 자동화 기업",
     tags: ["로보틱스", "물류자동화", "자율주행", "B2B"],
     scoreBreakdown: [
@@ -243,16 +244,16 @@ export const companies: Company[] = [
       "대기업 물류 자회사와의 경쟁 심화 가능성",
     ],
     financials: [
-      { year: "2022", revenue: 21, operatingProfit: -12, employees: 25 },
-      { year: "2023", revenue: 48, operatingProfit: -9, employees: 42 },
-      { year: "2024", revenue: 89, operatingProfit: -2, employees: 54 },
-      { year: "2025", revenue: 134, operatingProfit: 8, employees: 61 },
+      { year: "2021", revenue: 21, operatingProfit: -12, employees: 25 },
+      { year: "2022", revenue: 48, operatingProfit: -9, employees: 42 },
+      { year: "2023", revenue: 89, operatingProfit: -2, employees: 54 },
+      { year: "2024", revenue: 134, operatingProfit: 8, employees: 61 },
     ],
     patents: 5,
     certifications: ["벤처기업 인증", "기업부설연구소"],
-    creditGrade: "BBB",
+    creditGrade: null,
     debtRatio: 124,
-    currentRatio: 118,
+    currentRatio: null,
     runwayMonths: null,
     report: {
       summary:
@@ -262,9 +263,9 @@ export const companies: Company[] = [
       technology:
         "자체 SLAM 기반 자율주행과 다중 로봇 협업 관제 기술을 보유했다. 기존 창고 구조를 크게 변경하지 않고도 도입 가능한 점이 강점이다.",
       team:
-        "CEO 박도윤은 로보틱스 연구소 출신으로 하드웨어와 소프트웨어를 아우르는 팀을 구성했다. 현장 엔지니어링 역량이 강하다.",
+        "최근 고용 인원은 61명이다. 대표자 이력과 직무별 인력 구성은 현재 원천데이터에 없어 평가하지 않는다.",
       finance:
-        "2025년 매출 134억 원, 소폭 흑자 전환에 성공했다. 반복 매출 비중이 상승 중이나 하드웨어 원가 구조로 마진은 SaaS 대비 낮은 편이다.",
+        "2024년 매출 134억 원, 영업이익 8억 원이다. 유동비율과 현금성 자산 자료가 없어 단기 지급여력은 판단하지 않는다.",
     },
   },
   {
@@ -272,14 +273,11 @@ export const companies: Company[] = [
     name: "콴타시큐어",
     logoSeed: "Q",
     industry: "보안 · 데이터",
-    stage: "Seed",
     location: "서울 마포",
     founded: 2022,
     employees: 23,
-    matchScore: 78,
-    fundingTotal: "34억 원",
-    lastRoundValuation: "210억 원",
-    ceo: "정유진",
+    supportTotal: "3천만 원",
+    financialUnit: "억원",
     oneLiner: "AI 기반 이상행위 탐지로 내부 데이터 유출을 방지하는 보안 솔루션 스타트업",
     tags: ["보안", "AI", "데이터유출방지", "SaaS"],
     scoreBreakdown: [
@@ -299,17 +297,17 @@ export const companies: Company[] = [
       "대형 보안기업 대비 브랜드 인지도 낮음",
     ],
     financials: [
-      { year: "2022", revenue: 2, operatingProfit: -6, employees: 8 },
-      { year: "2023", revenue: 9, operatingProfit: -11, employees: 15 },
-      { year: "2024", revenue: 21, operatingProfit: -7, employees: 20 },
-      { year: "2025", revenue: 38, operatingProfit: -1, employees: 23 },
+      { year: "2021", revenue: 2, operatingProfit: -6, employees: 8 },
+      { year: "2022", revenue: 9, operatingProfit: -11, employees: 15 },
+      { year: "2023", revenue: 21, operatingProfit: -7, employees: 20 },
+      { year: "2024", revenue: 38, operatingProfit: -1, employees: 23 },
     ],
     patents: 3,
     certifications: ["벤처기업 인증", "GS인증 1등급"],
-    creditGrade: "BB",
+    creditGrade: null,
     debtRatio: 58,
-    currentRatio: 112,
-    runwayMonths: 9,
+    currentRatio: null,
+    runwayMonths: null,
     report: {
       summary:
         "콴타시큐어는 AI 이상행위 탐지 기술로 내부자에 의한 데이터 유출을 방지하는 보안 솔루션을 제공한다. 강화되는 정보보호 규제 환경에서 수요가 확대되고 있는 초기 성장 기업이다.",
@@ -318,9 +316,9 @@ export const companies: Company[] = [
       technology:
         "사용자·엔티티 행위분석(UEBA) 모델로 룰기반 대비 오탐을 크게 낮췄다. 온프레미스와 클라우드를 모두 지원해 규제 산업 적용이 용이하다.",
       team:
-        "CEO 정유진은 보안 컨설팅과 침해대응 경력을 보유했다. 소수정예 보안 엔지니어 중심으로 구성되어 있다.",
+        "최근 고용 인원은 23명이다. 대표자 이력과 보안 전문인력 구성은 현재 원천데이터에 없어 평가하지 않는다.",
       finance:
-        "2025년 매출 38억 원으로 성장 중이나 아직 손익분기 이전 단계다. 후속 투자 유치와 레퍼런스 확대가 성장의 관건이다.",
+        "2024년 매출 38억 원, 영업손실 1억 원이다. 유동비율과 자금 런웨이 자료는 없어 후속 자금 필요성을 단정할 수 없다.",
     },
   },
   {
@@ -328,14 +326,11 @@ export const companies: Company[] = [
     name: "솔라리스에너지",
     logoSeed: "S",
     industry: "에너지 · 그리드",
-    stage: "Series B",
     location: "부산 해운대",
     founded: 2018,
     employees: 94,
-    matchScore: 82,
-    fundingTotal: "320억 원",
-    lastRoundValuation: "1,800억 원",
-    ceo: "최민서",
+    supportTotal: "1.2억 원",
+    financialUnit: "억원",
     oneLiner: "분산형 에너지 자원을 통합 관리하는 가상발전소(VPP) 플랫폼 운영 기업",
     tags: ["에너지", "VPP", "탄소중립", "플랫폼"],
     scoreBreakdown: [
@@ -355,16 +350,16 @@ export const companies: Company[] = [
       "자본집약적 사업구조로 조달 부담",
     ],
     financials: [
-      { year: "2022", revenue: 45, operatingProfit: -15, employees: 58 },
-      { year: "2023", revenue: 98, operatingProfit: -6, employees: 74 },
-      { year: "2024", revenue: 171, operatingProfit: 9, employees: 86 },
-      { year: "2025", revenue: 268, operatingProfit: 27, employees: 94 },
+      { year: "2021", revenue: 45, operatingProfit: -15, employees: 58 },
+      { year: "2022", revenue: 98, operatingProfit: -6, employees: 74 },
+      { year: "2023", revenue: 171, operatingProfit: 9, employees: 86 },
+      { year: "2024", revenue: 268, operatingProfit: 27, employees: 94 },
     ],
     patents: 9,
     certifications: ["벤처기업 인증", "이노비즈", "기업부설연구소"],
-    creditGrade: "BBB-",
+    creditGrade: null,
     debtRatio: 138,
-    currentRatio: 96,
+    currentRatio: null,
     runwayMonths: null,
     report: {
       summary:
@@ -374,9 +369,9 @@ export const companies: Company[] = [
       technology:
         "다수의 분산자원을 실시간 예측·제어하�� 최적��� 엔진과 정산 자동화 시스템을 보유했다. 예측 정확도가 정산 수익에 직접 기여한다.",
       team:
-        "CEO 최민서는 전력·에너지 산업 출신으로 규제 대응 역량이 강하다. 전력시장 전문가와 엔지니어가 균형 있게 구성되어 있다.",
+        "최근 고용 인원은 94명이다. 대표자 이력과 전력시장 전문인력 구성은 현재 원천데이터에 없어 평가하지 않는다.",
       finance:
-        "2025년 매출 268억 원, 영업이익 27억 원으로 흑자 기조를 확립했다. 다만 사업 확장에 따른 자본 소요가 지속되고 있다.",
+        "2024년 매출 268억 원, 영업이익 27억 원이다. 현금흐름과 자금 런웨이는 원천 필드가 없어 판단할 수 없다.",
     },
   },
 ]

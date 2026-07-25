@@ -1,4 +1,4 @@
-import { ShieldCheck, ShieldAlert, ShieldX } from "lucide-react"
+import { ShieldCheck, ShieldAlert, ShieldX, CircleHelp } from "lucide-react"
 import { assessFinancialRisk, riskTierTone, type RiskTier } from "@/lib/risk"
 import { type Company } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
@@ -7,6 +7,7 @@ const tierIcon: Record<RiskTier, typeof ShieldCheck> = {
   안정: ShieldCheck,
   주의: ShieldAlert,
   위험: ShieldX,
+  정보부족: CircleHelp,
 }
 
 export function FinancialRiskBadge({ company, className }: { company: Company; className?: string }) {

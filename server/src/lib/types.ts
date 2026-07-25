@@ -11,6 +11,20 @@ export type Program = {
   targetStage: string
   keywords: string[]
   description: string
+  reviewStatus: 'draft' | 'reviewed' | 'active'
+  documentId?: string | null
+  requirements: ProgramRequirement[]
+}
+
+export type ProgramRequirement = {
+  id: string
+  type: 'eligibility' | 'exclusion' | 'preference' | 'evaluation' | 'document' | 'obligation'
+  label: string
+  rule: Record<string, unknown> | null
+  weight: number | null
+  sourcePage: number | null
+  sourceText: string | null
+  reviewStatus: 'draft' | 'reviewed' | 'active'
 }
 
 // ── DB Row 타입 ──────────────────────────────────────────────
@@ -127,6 +141,7 @@ export interface FinancialPoint {
 }
 
 export interface IndicatorRow {
+  code: string;
   label: string;
   value: number | null;
   unit: string;
@@ -135,6 +150,11 @@ export interface IndicatorRow {
   cohort_n: number | null;
   status: 'ok' | 'caution' | 'warning' | 'missing' | 'negative_equity';
   flag_reason: string | null;
+  direction: 'higher_is_better' | 'lower_is_better' | 'neutral';
+  as_of_year: number | null;
+  evidence_ids: string[];
+  formula_version: string;
+  external_benchmark?: ExternalBenchmark | null;
 }
 
 export interface SixBoxCheck {
@@ -156,6 +176,7 @@ export interface SupportSummaryItem {
 export interface SupportSummary {
   total_episodes: number;
   total_amount_million: number;
+  missing_amount_count: number;
   years_received: number[];
   is_consecutive_3yr: boolean;
   episode_list: SupportSummaryItem[];
@@ -168,6 +189,53 @@ export interface SimilarCompany {
   size: string | null;
   region: string | null;
   cohort_level: string;
+  distance: number;
+  compared_metrics: string[];
+}
+
+export interface Evidence {
+  evidence_id: string;
+  source_file: string;
+  source_sheet_page: string | null;
+  source_row_cell: string | null;
+  reference_year: number | null;
+  raw_value: string | number | null;
+  normalized_value: string | number | null;
+  formula: string | null;
+  formula_version: string;
+  external_dataset_id: string | null;
+}
+
+export interface ExternalBenchmark {
+  dataset_id: string;
+  reference_year: number;
+  metric_code: string;
+  metric_label: string;
+  value: number;
+  unit: string;
+  gap: number;
+  ksic_code: string;
+  company_size: string;
+  source_locator: string | null;
+}
+
+export interface RegionalContext {
+  status: 'ok' | 'not_applicable' | 'not_available';
+  reason: string | null;
+  dataset_id: string | null;
+  reference_year: number | null;
+  region_name: string | null;
+  ksic_code: string | null;
+  establishment_count: number | null;
+  employee_count: number | null;
+  employees_per_establishment: number | null;
+}
+
+export interface NtisSummary {
+  project_count: number;
+  lead_count: number;
+  government_funding_won: number;
+  latest_year: number | null;
 }
 
 export interface CompanyReportResponse {
@@ -215,42 +283,62 @@ export interface CompanyReportResponse {
   };
   support_summary: SupportSummary;
   similar_companies: SimilarCompany[];
+  external_benchmarks: ExternalBenchmark[];
+  regional_context: RegionalContext;
+  ntis_summary: NtisSummary;
+  evidence: Evidence[];
+  program_context: {
+    program_id: string;
+    gate_status: 'eligible' | 'ineligible' | 'needs_review';
+    requirement_results: Array<{
+      requirement_id: string;
+      label: string;
+      status: 'met' | 'not_met' | 'unknown';
+      weight: number | null;
+      reason: string;
+      evidence_ids: string[];
+    }>;
+    program_fit_score: number | null;
+  } | null;
+  data_quality: {
+    status: 'high' | 'medium' | 'low';
+    latest_financial_year: number | null;
+    missing_critical_fields: string[];
+  };
   data_warnings: string[];
   follow_up_questions: string[];
 }
 
-// ── 기업 목록 항목 (company-view.tsx 대응) ──────────────────
+// ── 기업 목록 항목 ───────────────────────────────────────────
 
 export interface CompanyListItem {
   id: string;
-  name: string;
-  logoSeed: string;
+  alias_label: string;
   industry: string;
-  stage: string;
+  ksic11: string | null;
+  size: string | null;
   location: string;
-  founded: number | null;
-  employees: number | null;
-  matchScore: number;
-  fundingTotal: string;
-  lastRoundValuation: string;
-  ceo: string;
-  oneLiner: string;
-  tags: string[];
-  scoreBreakdown: Array<{ label: string; score: number; maxScore: number }>;
-  strengths: string[];
-  risks: string[];
-  financials: FinancialPoint[];
-  patents: number;
+  founded_year: number | null;
+  employee_count: number | null;
+  employee_year: number | null;
+  latest_revenue_million: number | null;
+  latest_revenue_year: number | null;
+  revenue_growth_pct: number | null;
+  operating_margin_pct: number | null;
+  debt_ratio_pct: number | null;
+  support_total_million: number;
+  support_episode_count: number;
+  valid_patent_count: number | null;
   certifications: string[];
-  creditGrade: string;
-  debtRatio: number | null;
-  currentRatio: number | null;
-  runwayMonths: number | null;
-  report: {
-    summary: string;
-    market: string;
-    technology: string;
-    team: string;
-    finance: string;
-  };
+  risk_signals: string[];
+  data_quality: 'high' | 'medium' | 'low';
+  program_fit_score: number | null;
+}
+
+export interface CompanyListResponse {
+  items: CompanyListItem[];
+  page: number;
+  page_size: number;
+  total: number;
+  sort: string;
 }

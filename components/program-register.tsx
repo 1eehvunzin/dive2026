@@ -86,7 +86,7 @@ export function ProgramRegister({
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           {initial
             ? "추출된 항목을 수정한 뒤 저장하면 추천 순위가 다시 계산됩니다."
-            : "공고문 PDF를 업로드하면 AI가 사업명·분야·지원 규모·평가 키워드를 자동으로 추출합니다. 추출 결과를 확인하고 등록하면 기업 풀에서 추천 순위가 계산됩니다."}
+            : "공고문 PDF를 업로드하면 사업명·분야·지원 규모·자격·배제요건과 평가항목을 추출합니다. 추출 결과를 확인하고 등록하면 기업별 충족 여부와 근거를 비교할 수 있습니다."}
         </p>
       </div>
 

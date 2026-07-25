@@ -15,7 +15,7 @@ import {
   Square,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { ScoreRing, TrendBars, MultiAreaLine, RadarChart, PercentileStrip, SupportDots, BenchmarkBars } from "@/components/charts"
+import { TrendBars, MultiAreaLine, RadarChart, PercentileStrip, SupportDots, BenchmarkBars } from "@/components/charts"
 import { InvestmentSim } from "@/components/investment-sim"
 import { FinancialRiskBadge } from "@/components/financial-risk-badge"
 import { type Company } from "@/lib/mock-data"
@@ -28,7 +28,7 @@ const tabs: { id: Tab; label: string }[] = [
   { id: "overview", label: "기업 개요" },
   { id: "financials", label: "재무 분석" },
   { id: "evaluation", label: "평가 상세" },
-  { id: "forecast", label: "모의 지원 예측" },
+  { id: "forecast", label: "모의투자 시나리오" },
 ]
 
 export function CompanyReport({
@@ -78,7 +78,7 @@ export function CompanyReport({
       <div className="flex items-center justify-between">
         <Button variant="ghost" size="sm" onClick={onBack} className="gap-1.5 text-muted-foreground">
           <ArrowLeft className="h-4 w-4" />
-          추천 목록으로
+          기업 목록으로
         </Button>
         <div className="flex items-center gap-2">
           <Button
@@ -103,9 +103,6 @@ export function CompanyReport({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-semibold text-foreground">{company.name}</h1>
-                <span className="rounded bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
-                  {company.stage}
-                </span>
                 <FinancialRiskBadge company={company} />
               </div>
               <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground">{company.oneLiner}</p>
@@ -136,15 +133,20 @@ export function CompanyReport({
               </div>
             </div>
           </div>
-          <ScoreRing score={company.matchScore} />
+          <div className="rounded-xl border border-border bg-secondary/40 px-5 py-4 text-right">
+            <p className="text-xs text-muted-foreground">데이터 기준연도</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">
+              {company.financials.at(-1)?.year ?? "확인 불가"}
+            </p>
+          </div>
         </div>
 
         <div className="mt-6 grid grid-cols-2 gap-3 border-t border-border pt-5 sm:grid-cols-4">
           {[
-            { label: "누적 투자유치", value: company.fundingTotal },
-            { label: "최근 기업가치", value: company.lastRoundValuation },
+            { label: "누적 지원금", value: company.supportTotal },
+            { label: "최근 매출", value: company.financials.at(-1)?.revenue == null ? "자료 없음" : `${company.financials.at(-1)?.revenue}${company.financialUnit}` },
             { label: "등록 특허", value: `${company.patents}건` },
-            { label: "대표이사", value: company.ceo },
+            { label: "임직원", value: `${company.employees}명` },
           ].map((s) => (
             <div key={s.label}>
               <p className="text-xs text-muted-foreground">{s.label}</p>
@@ -259,6 +261,8 @@ function OverviewTab({ company }: { company: Company }) {
 function FinancialsTab({ company }: { company: Company }) {
   const last = company.financials[company.financials.length - 1]
   const risk = assessFinancialRisk(company)
+  const formatMetric = (value: number | null, suffix: string) => value === null ? "자료 없음" : `${value}${suffix}`
+  const formatMoney = (value: number | null) => value === null ? "자료 없음" : `${value}${company.financialUnit}`
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-border bg-card p-6">
@@ -271,10 +275,10 @@ function FinancialsTab({ company }: { company: Company }) {
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
-            { label: "신용등급", value: company.creditGrade },
-            { label: "부채비율", value: `${company.debtRatio}%` },
-            { label: "유동비율", value: `${company.currentRatio}%` },
-            { label: "잔여 런웨이", value: company.runwayMonths !== null ? `${company.runwayMonths}개월` : "흑자 지속" },
+            { label: "신용등급", value: company.creditGrade ?? "CRETOP 연계 전" },
+            { label: "부채비율", value: formatMetric(company.debtRatio, "%") },
+            { label: "유동비율", value: formatMetric(company.currentRatio, "%") },
+            { label: "잔여 런웨이", value: formatMetric(company.runwayMonths, "개월") },
           ].map((k) => (
             <div key={k.label} className="rounded-lg border border-border bg-secondary/40 p-3.5">
               <p className="text-xs text-muted-foreground">{k.label}</p>
@@ -282,7 +286,7 @@ function FinancialsTab({ company }: { company: Company }) {
             </div>
           ))}
         </div>
-        {risk.signals.length > 0 ? (
+        {risk.signals.length > 0 && (
           <ul className="mt-4 space-y-2">
             {risk.signals.map((s, i) => (
               <li key={i} className="flex items-start gap-2 text-sm leading-relaxed text-foreground/90">
@@ -291,9 +295,15 @@ function FinancialsTab({ company }: { company: Company }) {
               </li>
             ))}
           </ul>
-        ) : (
+        )}
+        {risk.unavailable.length > 0 && (
           <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-            부채비율·유동비율·자금 런웨이 모두 안정 범위 내에 있어 지원 기간 중 재무적 리스크 신호가 확인되지 않습니다.
+            {risk.unavailable.join("·")}은 원천 필드가 없어 판단에서 제외했습니다. 결측은 안정 신호로 해석하지 않습니다.
+          </p>
+        )}
+        {risk.signals.length === 0 && risk.unavailable.length === 0 && (
+          <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+            현재 규칙에서 임계치를 넘은 신호는 없지만, 이는 지원 기간 중 생존이나 상환능력을 보장하지 않습니다.
           </p>
         )}
       </div>
@@ -305,11 +315,11 @@ function FinancialsTab({ company }: { company: Company }) {
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <span className="inline-block h-0.5 w-4 rounded" style={{ backgroundColor: "var(--chart-1)" }} />
-              매출 (억 원)
+              매출 ({company.financialUnit})
             </span>
             <span className="flex items-center gap-1.5">
               <span className="inline-block h-0.5 w-4 rounded" style={{ backgroundColor: "var(--chart-3)" }} />
-              영업이익 (억 원)
+              영업이익 ({company.financialUnit})
             </span>
           </div>
         </div>
@@ -329,13 +339,13 @@ function FinancialsTab({ company }: { company: Company }) {
               fill: false,
             },
           ]}
-          unit="억원"
+          unit={company.financialUnit}
         />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-xl border border-border bg-card p-6">
-          <h3 className="mb-4 font-semibold text-foreground">매출 추이 (억 원)</h3>
+          <h3 className="mb-4 font-semibold text-foreground">매출 추이 ({company.financialUnit})</h3>
           <TrendBars data={company.financials.map((f) => ({ label: f.year, value: f.revenue }))} colorVar="--chart-1" />
         </div>
         <div className="rounded-xl border border-border bg-card p-6">
@@ -346,10 +356,10 @@ function FinancialsTab({ company }: { company: Company }) {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "2025 매출", value: `${last.revenue}억` },
-          { label: "2025 영업이익", value: `${last.operatingProfit}억` },
-          { label: "임직원 수", value: `${last.employees}명` },
-          { label: "최근 기업가치", value: company.lastRoundValuation },
+          { label: `${last.year} 매출`, value: formatMoney(last.revenue) },
+          { label: `${last.year} 영업이익`, value: formatMoney(last.operatingProfit) },
+          { label: `${last.year} 임직원 수`, value: last.employees === null ? "자료 없음" : `${last.employees}명` },
+          { label: "누적 지원금", value: company.supportTotal },
         ].map((k) => (
           <div key={k.label} className="rounded-xl border border-border bg-card p-4">
             <p className="text-xs text-muted-foreground">{k.label}</p>

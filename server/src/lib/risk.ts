@@ -1,344 +1,422 @@
-import path from 'path';
 import fs from 'fs';
+import path from 'path';
 import type {
-  CompanyMaster, CompanyYearly, CompanyPercentile,
-  SupportEpisode, SixBoxCheck, IndicatorRow, SupportSummary
+  CompanyMaster,
+  CompanyMetric,
+  CompanyPercentile,
+  CompanyYearly,
+  IndicatorRow,
+  SixBoxCheck,
+  SupportEpisode,
+  SupportSummary,
 } from './types';
 
-// ── 임계값 로딩 ───────────────────────────────────────────────
-
-const THRESHOLD_PATH = path.resolve(__dirname, '../../../../etl/config/threshold.json');
-
 interface Threshold {
-  survival: { revenue_pctl_caution: number; tenure_caution_years: number; employment_pctl_caution: number; min_employees_viable: number };
-  financial: { debt_ratio_warning: number; debt_ratio_caution: number; current_ratio_caution: number; op_margin_caution_pct: number; runway_caution_months: number };
-  technology: { rd_intensity_base_pct: number; rd_intensity_strong_pct: number };
-  support_history: { repeat_episode_caution: number; consecutive_years_caution: number; overlap_days_threshold: number };
+  survival: {
+    revenue_pctl_caution: number;
+    tenure_caution_years: number;
+    employment_pctl_caution: number;
+    min_employees_viable: number;
+  };
+  financial: {
+    debt_ratio_warning: number;
+    debt_ratio_caution: number;
+    op_margin_caution_pct: number;
+  };
+  support_history: {
+    repeat_episode_caution: number;
+    consecutive_years_caution: number;
+    overlap_days_threshold: number;
+  };
 }
 
-let _threshold: Threshold | null = null;
+const DEFAULT_THRESHOLD: Threshold = {
+  survival: {
+    revenue_pctl_caution: 30,
+    tenure_caution_years: 3,
+    employment_pctl_caution: 30,
+    min_employees_viable: 2,
+  },
+  financial: {
+    debt_ratio_warning: 200,
+    debt_ratio_caution: 100,
+    op_margin_caution_pct: 0,
+  },
+  support_history: {
+    repeat_episode_caution: 5,
+    consecutive_years_caution: 3,
+    overlap_days_threshold: 30,
+  },
+};
+
+let thresholdCache: Threshold | null = null;
+
 function getThreshold(): Threshold {
-  if (!_threshold) {
-    try {
-      _threshold = JSON.parse(fs.readFileSync(THRESHOLD_PATH, 'utf-8'));
-    } catch {
-      _threshold = {
-        survival: { revenue_pctl_caution: 30, tenure_caution_years: 3, employment_pctl_caution: 30, min_employees_viable: 2 },
-        financial: { debt_ratio_warning: 200, debt_ratio_caution: 100, current_ratio_caution: 130, op_margin_caution_pct: 0, runway_caution_months: 18 },
-        technology: { rd_intensity_base_pct: 2, rd_intensity_strong_pct: 5 },
-        support_history: { repeat_episode_caution: 5, consecutive_years_caution: 3, overlap_days_threshold: 30 },
-      };
-    }
-  }
-  return _threshold!;
+  if (thresholdCache) return thresholdCache;
+  const candidates = [
+    path.resolve(__dirname, '../../config/threshold.json'),
+    path.resolve(__dirname, '../../../../etl/config/threshold.json'),
+  ];
+  const thresholdPath = candidates.find(candidate => fs.existsSync(candidate));
+  thresholdCache = thresholdPath
+    ? { ...DEFAULT_THRESHOLD, ...JSON.parse(fs.readFileSync(thresholdPath, 'utf-8')) }
+    : DEFAULT_THRESHOLD;
+  return thresholdCache!;
 }
-
-// ── 유틸 ─────────────────────────────────────────────────────
 
 function tenureYears(foundedDate: string | null, asOfYear: number): number | null {
   if (!foundedDate) return null;
-  const d = new Date(foundedDate);
-  if (isNaN(d.getTime())) return null;
-  return asOfYear - d.getFullYear();
+  const founded = new Date(foundedDate);
+  if (Number.isNaN(founded.getTime())) return null;
+  return Math.max(0, asOfYear - founded.getUTCFullYear());
 }
 
-function daysBetween(a: string, b: string): number {
-  return Math.abs((new Date(b).getTime() - new Date(a).getTime()) / 86_400_000);
+function metricMap(metrics: CompanyMetric[]): Map<string, CompanyMetric> {
+  return new Map(metrics.map(metric => [metric.metric_code, metric]));
 }
 
-function pctlStatus(pctl: number | null, cautionBelow: number): 'ok' | 'caution' | 'warning' | 'missing' {
-  if (pctl === null) return 'missing';
-  if (pctl < cautionBelow / 2) return 'warning';
-  if (pctl < cautionBelow) return 'caution';
-  return 'ok';
+function evidenceId(companyId: number, year: number | null, code: string): string {
+  return `kodata:${companyId}:${year ?? 'latest'}:${code}`;
 }
 
-// ── 30초 판단판 (6칸) ─────────────────────────────────────────
+function indicator(params: {
+  companyId: number;
+  code: string;
+  label: string;
+  value: number | null;
+  unit: string;
+  percentile?: CompanyPercentile;
+  status: IndicatorRow['status'];
+  reason?: string | null;
+  direction: IndicatorRow['direction'];
+  year: number | null;
+  formulaVersion?: string;
+}): IndicatorRow {
+  return {
+    code: params.code,
+    label: params.label,
+    value: params.value,
+    unit: params.unit,
+    pctl: params.percentile?.pctl ?? null,
+    cohort_level: params.percentile?.cohort_level ?? null,
+    cohort_n: params.percentile?.cohort_n ?? null,
+    status: params.status,
+    flag_reason: params.reason ?? null,
+    direction: params.direction,
+    as_of_year: params.year,
+    evidence_ids: [evidenceId(params.companyId, params.year, params.code)],
+    formula_version: params.formulaVersion ?? 'v2',
+  };
+}
 
 export function buildSixBoxChecks(
   master: CompanyMaster,
   latestYearly: CompanyYearly | null,
-  pctlMap: Map<string, CompanyPercentile>,
+  percentiles: Map<string, CompanyPercentile>,
+  metrics: Map<string, CompanyMetric>,
   supportSummary: SupportSummary,
-  asOfFy: number
+  asOfFy: number,
 ): SixBoxCheck[] {
-  const thr = getThreshold();
-  const checks: SixBoxCheck[] = [];
-
-  // 1. 기업 생존 상태
-  const isClosed = master.closed_flag === 1;
-  const statusBad = master.biz_status && !['정상'].includes(master.biz_status);
-  checks.push({
-    label: '기업 운영 상태',
-    status: isClosed ? 'red' : statusBad ? 'yellow' : 'green',
-    value: master.biz_status || '정보 없음',
-    note: isClosed ? `폐업/청산 확인 필요 (${master.biz_status})` : null,
-  });
-
-  // 2. 매출 규모 위치
-  const revPctl = pctlMap.get('revenue_growth')?.pctl ?? null;
+  const threshold = getThreshold();
   const revenue = latestYearly?.revenue ?? null;
-  checks.push({
-    label: '매출 규모',
-    status: revenue === null ? 'gray' : revPctl !== null && revPctl < thr.survival.revenue_pctl_caution ? 'yellow' : 'green',
-    value: revenue !== null ? `${(revenue / 1000).toFixed(0)}백만원 (${asOfFy}년)` : '데이터 없음',
-    note: revPctl !== null ? `동종기업 ${revPctl.toFixed(0)}백분위` : null,
-  });
-
-  // 3. 업력
-  const tenure = tenureYears(master.founded_date, asOfFy);
-  checks.push({
-    label: '업력',
-    status: tenure === null ? 'gray' : tenure < thr.survival.tenure_caution_years ? 'yellow' : 'green',
-    value: tenure !== null ? `${tenure}년` : '정보 없음',
-    note: tenure !== null && tenure < thr.survival.tenure_caution_years ? `단기업력 (${thr.survival.tenure_caution_years}년 미만)` : null,
-  });
-
-  // 4. 고용 현황
-  const emp = latestYearly?.pension_enrolled ?? latestYearly?.employees ?? null;
-  const empPctl = pctlMap.get('employment_growth')?.pctl ?? null;
-  checks.push({
-    label: '고용 규모',
-    status: emp === null ? 'gray' : emp < thr.survival.min_employees_viable ? 'yellow' : 'green',
-    value: emp !== null ? `${emp}명 (${asOfFy}년)` : '데이터 없음',
-    note: empPctl !== null ? `고용변화 ${empPctl.toFixed(0)}백분위` : null,
-  });
-
-  // 5. 재무 안정성
+  const revenuePctl = percentiles.get('revenue_level')?.pctl ?? null;
+  const employment = latestYearly?.pension_enrolled ?? latestYearly?.employees ?? null;
+  const employmentPctl = percentiles.get('employment_level')?.pctl ?? null;
   const equity = latestYearly?.equity ?? null;
-  const liab = latestYearly?.liabilities ?? null;
-  const debtRatio = (equity !== null && liab !== null && equity > 0) ? liab / equity * 100 : null;
-  const isNegativeEquity = equity !== null && equity <= 0;
-  const opMargin = latestYearly?.op_margin_pct ?? null;
-  const finStatus = isNegativeEquity ? 'red'
-    : debtRatio !== null && debtRatio > thr.financial.debt_ratio_warning ? 'yellow'
-    : opMargin !== null && opMargin < thr.financial.op_margin_caution_pct ? 'yellow'
-    : equity === null ? 'gray' : 'green';
-  checks.push({
-    label: '재무 안정성',
-    status: finStatus,
-    value: isNegativeEquity ? '자본잠식' : debtRatio !== null ? `부채비율 ${debtRatio.toFixed(0)}%` : '데이터 없음',
-    note: isNegativeEquity ? '자본총계 ≤ 0' : opMargin !== null && opMargin < 0 ? '영업적자' : null,
-  });
+  const debtRatio = metrics.get('debt_ratio')?.value ?? null;
+  const operatingMargin = metrics.get('operating_margin')?.value ?? null;
+  const tenure = tenureYears(master.founded_date, asOfFy);
+  const statusKnown = Boolean(master.biz_status);
+  const statusBad = statusKnown && master.biz_status !== '정상';
 
-  // 6. 지원 집중도
-  const total = supportSummary.total_episodes;
-  const consec = supportSummary.is_consecutive_3yr;
-  checks.push({
-    label: '지원 이력',
-    status: total === 0 ? 'gray' : consec ? 'yellow' : total >= thr.support_history.repeat_episode_caution ? 'yellow' : 'green',
-    value: total === 0 ? '이력 없음' : `${total}건 수혜`,
-    note: consec ? '3년 연속 수혜' : total >= thr.support_history.repeat_episode_caution ? `집중 수혜 확인 필요` : null,
-  });
-
-  return checks;
+  return [
+    {
+      label: '기업 운영 상태',
+      status: master.closed_flag === 1 ? 'red' : !statusKnown ? 'gray' : statusBad ? 'yellow' : 'green',
+      value: master.biz_status || '정보 없음',
+      note: master.closed_flag === 1 ? '폐업·휴업·청산 여부 확인 필요' : null,
+    },
+    {
+      label: '매출 규모',
+      status: revenue === null
+        ? 'gray'
+        : revenuePctl !== null && revenuePctl < threshold.survival.revenue_pctl_caution
+          ? 'yellow'
+          : 'green',
+      value: revenue === null ? '데이터 없음' : `${(revenue / 1000).toFixed(0)}백만원 (${asOfFy}년)`,
+      note: revenuePctl === null ? '동종기업 규모 비교 불가' : `동종기업 매출규모 ${revenuePctl.toFixed(0)}백분위`,
+    },
+    {
+      label: '업력',
+      status: tenure === null ? 'gray' : tenure < threshold.survival.tenure_caution_years ? 'yellow' : 'green',
+      value: tenure === null ? '정보 없음' : `${tenure}년`,
+      note: tenure !== null && tenure < threshold.survival.tenure_caution_years
+        ? `${threshold.survival.tenure_caution_years}년 미만`
+        : null,
+    },
+    {
+      label: '고용 규모',
+      status: employment === null
+        ? 'gray'
+        : employment < threshold.survival.min_employees_viable
+          || (employmentPctl !== null && employmentPctl < threshold.survival.employment_pctl_caution)
+          ? 'yellow'
+          : 'green',
+      value: employment === null ? '데이터 없음' : `${employment}명 (${asOfFy}년)`,
+      note: employmentPctl === null ? '동종기업 규모 비교 불가' : `동종기업 고용규모 ${employmentPctl.toFixed(0)}백분위`,
+    },
+    {
+      label: '재무 안정성',
+      status: equity !== null && equity <= 0
+        ? 'red'
+        : debtRatio !== null && debtRatio > threshold.financial.debt_ratio_warning
+          ? 'yellow'
+          : operatingMargin !== null && operatingMargin < threshold.financial.op_margin_caution_pct
+            ? 'yellow'
+            : equity === null || debtRatio === null
+              ? 'gray'
+              : 'green',
+      value: equity !== null && equity <= 0
+        ? '자본총계 0 이하'
+        : debtRatio !== null
+          ? `부채비율 ${debtRatio.toFixed(0)}%`
+          : '데이터 없음',
+      note: operatingMargin !== null && operatingMargin < 0 ? `영업이익률 ${operatingMargin.toFixed(1)}%` : null,
+    },
+    {
+      label: '지원 이력',
+      status: supportSummary.total_episodes === 0
+        ? 'gray'
+        : supportSummary.is_consecutive_3yr
+          || supportSummary.total_episodes >= threshold.support_history.repeat_episode_caution
+          || supportSummary.overlap_pairs.length > 0
+          ? 'yellow'
+          : 'green',
+      value: supportSummary.total_episodes === 0 ? '이력 없음' : `${supportSummary.total_episodes}개 episode`,
+      note: supportSummary.missing_amount_count > 0
+        ? `지원금 미상 ${supportSummary.missing_amount_count}건 포함`
+        : supportSummary.is_consecutive_3yr
+          ? '3개년 이상 연속 수혜'
+          : null,
+    },
+  ];
 }
-
-// ── 생존 지표 ────────────────────────────────────────────────
 
 export function buildSurvivalIndicators(
   master: CompanyMaster,
   yearlies: CompanyYearly[],
-  pctlMap: Map<string, CompanyPercentile>,
-  asOfFy: number
+  percentiles: Map<string, CompanyPercentile>,
+  metricsInput: CompanyMetric[],
+  asOfFy: number,
 ): IndicatorRow[] {
-  const thr = getThreshold();
-  const yMap = new Map(yearlies.map(y => [y.fiscal_year, y]));
-  const latest = yMap.get(asOfFy) || yMap.get(Math.max(...yearlies.map(y => y.fiscal_year)));
-
-  const rows: IndicatorRow[] = [];
-
-  // 매출 규모
-  const rev = latest?.revenue ?? null;
-  const revPctl = pctlMap.get('revenue_growth');
-  rows.push({
-    label: `매출액 (${asOfFy}년)`,
-    value: rev !== null ? Math.round(rev / 1000) : null,
-    unit: '백만원',
-    pctl: revPctl?.pctl ?? null,
-    cohort_level: revPctl?.cohort_level ?? null,
-    cohort_n: revPctl?.cohort_n ?? null,
-    status: rev === null ? 'missing' : revPctl && revPctl.pctl < thr.survival.revenue_pctl_caution ? 'caution' : 'ok',
-    flag_reason: rev === null ? '재무 미제출' : null,
-  });
-
-  // 업력
+  const threshold = getThreshold();
+  const metrics = metricMap(metricsInput);
+  const latest = yearlies.find(yearly => yearly.fiscal_year === asOfFy) ?? null;
+  const revenue = latest?.revenue ?? null;
+  const employment = latest?.pension_enrolled ?? latest?.employees ?? null;
+  const revenueLevelPctl = percentiles.get('revenue_level');
+  const employmentLevelPctl = percentiles.get('employment_level');
+  const revenueGrowth = metrics.get('revenue_growth')?.value ?? null;
+  const growthPctl = percentiles.get('revenue_growth');
   const tenure = tenureYears(master.founded_date, asOfFy);
-  rows.push({
-    label: '업력',
-    value: tenure,
-    unit: '년',
-    pctl: null,
-    cohort_level: null,
-    cohort_n: null,
-    status: tenure === null ? 'missing' : tenure < thr.survival.tenure_caution_years ? 'caution' : 'ok',
-    flag_reason: tenure !== null && tenure < thr.survival.tenure_caution_years ? `${thr.survival.tenure_caution_years}년 미만` : null,
-  });
 
-  // 고용
-  const emp = latest?.pension_enrolled ?? latest?.employees ?? null;
-  const empPctl = pctlMap.get('employment_growth');
-  rows.push({
-    label: `고용 인원 (${asOfFy}년)`,
-    value: emp,
-    unit: '명',
-    pctl: empPctl?.pctl ?? null,
-    cohort_level: empPctl?.cohort_level ?? null,
-    cohort_n: empPctl?.cohort_n ?? null,
-    status: emp === null ? 'missing' : emp < thr.survival.min_employees_viable ? 'caution' : 'ok',
-    flag_reason: null,
-  });
-
-  // 매출 성장률
-  const growthMetric = pctlMap.get('revenue_growth');
-  rows.push({
-    label: '매출 성장률 (전년비)',
-    value: growthMetric ? null : null, // metric value is in company_metric table
-    unit: '%',
-    pctl: growthMetric?.pctl ?? null,
-    cohort_level: growthMetric?.cohort_level ?? null,
-    cohort_n: growthMetric?.cohort_n ?? null,
-    status: growthMetric ? 'ok' : 'missing',
-    flag_reason: null,
-  });
-
-  return rows;
+  return [
+    indicator({
+      companyId: master.company_id,
+      code: 'revenue_level',
+      label: `매출액 (${asOfFy}년)`,
+      value: revenue === null ? null : revenue / 1000,
+      unit: '백만원',
+      percentile: revenueLevelPctl,
+      status: revenue === null
+        ? 'missing'
+        : revenueLevelPctl && revenueLevelPctl.pctl < threshold.survival.revenue_pctl_caution
+          ? 'caution'
+          : 'ok',
+      reason: revenue === null ? '재무 데이터 없음' : null,
+      direction: 'higher_is_better',
+      year: asOfFy,
+      formulaVersion: 'raw-v1',
+    }),
+    indicator({
+      companyId: master.company_id,
+      code: 'tenure_years',
+      label: '업력',
+      value: tenure,
+      unit: '년',
+      status: tenure === null ? 'missing' : tenure < threshold.survival.tenure_caution_years ? 'caution' : 'ok',
+      reason: tenure !== null && tenure < threshold.survival.tenure_caution_years
+        ? `${threshold.survival.tenure_caution_years}년 미만`
+        : null,
+      direction: 'neutral',
+      year: asOfFy,
+      formulaVersion: 'tenure-v2',
+    }),
+    indicator({
+      companyId: master.company_id,
+      code: 'employment_level',
+      label: `고용 인원 (${asOfFy}년)`,
+      value: employment,
+      unit: '명',
+      percentile: employmentLevelPctl,
+      status: employment === null
+        ? 'missing'
+        : employment < threshold.survival.min_employees_viable
+          ? 'caution'
+          : 'ok',
+      direction: 'higher_is_better',
+      year: asOfFy,
+      formulaVersion: 'raw-v1',
+    }),
+    indicator({
+      companyId: master.company_id,
+      code: 'revenue_growth',
+      label: '매출 성장률 (전년비)',
+      value: revenueGrowth,
+      unit: '%',
+      percentile: growthPctl,
+      status: revenueGrowth === null ? 'missing' : revenueGrowth < 0 ? 'caution' : 'ok',
+      reason: revenueGrowth === null ? '직전연도 또는 당해연도 매출 없음' : revenueGrowth < 0 ? '매출 감소' : null,
+      direction: 'higher_is_better',
+      year: asOfFy,
+    }),
+  ];
 }
-
-// ── 참고 지표 (weight=0) ─────────────────────────────────────
 
 export function buildReferenceIndicators(
+  companyId: number,
   latest: CompanyYearly | null,
-  pctlMap: Map<string, CompanyPercentile>,
+  percentiles: Map<string, CompanyPercentile>,
+  metricsInput: CompanyMetric[],
+  asOfFy: number,
 ): IndicatorRow[] {
-  const thr = getThreshold();
-  const rows: IndicatorRow[] = [];
-
-  // 부채비율
-  const liab = latest?.liabilities ?? null;
+  const threshold = getThreshold();
+  const metrics = metricMap(metricsInput);
   const equity = latest?.equity ?? null;
-  const debtRatio = (liab !== null && equity !== null && equity > 0) ? liab / equity * 100 : null;
-  const debtPctl = pctlMap.get('debt_ratio');
-  rows.push({
-    label: '부채비율',
-    value: debtRatio !== null ? Math.round(debtRatio) : null,
-    unit: '%',
-    pctl: debtPctl?.pctl ?? null,
-    cohort_level: debtPctl?.cohort_level ?? null,
-    cohort_n: debtPctl?.cohort_n ?? null,
-    status: equity !== null && equity <= 0 ? 'negative_equity'
-      : debtRatio === null ? 'missing'
-      : debtRatio > thr.financial.debt_ratio_warning ? 'warning'
-      : debtRatio > thr.financial.debt_ratio_caution ? 'caution' : 'ok',
-    flag_reason: equity !== null && equity <= 0 ? '자본잠식' : null,
-  });
+  const debtRatio = metrics.get('debt_ratio')?.value ?? null;
+  const operatingMargin = metrics.get('operating_margin')?.value ?? null;
+  const rdIntensity = metrics.get('rd_intensity')?.value ?? null;
 
-  // 영업이익률
-  const opMargin = latest?.op_margin_pct ?? null;
-  const opPctl = pctlMap.get('operating_margin');
-  rows.push({
-    label: '영업이익률',
-    value: opMargin !== null ? Math.round(opMargin * 10) / 10 : null,
-    unit: '%',
-    pctl: opPctl?.pctl ?? null,
-    cohort_level: opPctl?.cohort_level ?? null,
-    cohort_n: opPctl?.cohort_n ?? null,
-    status: opMargin === null ? 'missing' : opMargin < thr.financial.op_margin_caution_pct ? 'caution' : 'ok',
-    flag_reason: opMargin !== null && opMargin < 0 ? '영업적자' : null,
-  });
-
-  // R&D 집약도
-  const rdPctl = pctlMap.get('rd_intensity');
-  rows.push({
-    label: 'R&D 집약도',
-    value: null,
-    unit: '%',
-    pctl: rdPctl?.pctl ?? null,
-    cohort_level: rdPctl?.cohort_level ?? null,
-    cohort_n: rdPctl?.cohort_n ?? null,
-    status: rdPctl ? 'ok' : 'missing',
-    flag_reason: null,
-  });
-
-  return rows;
+  return [
+    indicator({
+      companyId,
+      code: 'debt_ratio',
+      label: '부채비율',
+      value: debtRatio,
+      unit: '%',
+      percentile: percentiles.get('debt_ratio'),
+      status: equity !== null && equity <= 0
+        ? 'negative_equity'
+        : debtRatio === null
+          ? 'missing'
+          : debtRatio > threshold.financial.debt_ratio_warning
+            ? 'warning'
+            : debtRatio > threshold.financial.debt_ratio_caution
+              ? 'caution'
+              : 'ok',
+      reason: equity !== null && equity <= 0 ? '자본총계 0 이하로 비율 미계산' : null,
+      direction: 'lower_is_better',
+      year: asOfFy,
+    }),
+    indicator({
+      companyId,
+      code: 'operating_margin',
+      label: '영업이익률',
+      value: operatingMargin,
+      unit: '%',
+      percentile: percentiles.get('operating_margin'),
+      status: operatingMargin === null ? 'missing' : operatingMargin < 0 ? 'caution' : 'ok',
+      reason: operatingMargin !== null && operatingMargin < 0 ? '영업적자' : null,
+      direction: 'higher_is_better',
+      year: asOfFy,
+    }),
+    indicator({
+      companyId,
+      code: 'rd_intensity',
+      label: 'R&D 집약도',
+      value: rdIntensity,
+      unit: '%',
+      percentile: percentiles.get('rd_intensity'),
+      status: rdIntensity === null ? 'missing' : 'ok',
+      reason: rdIntensity === null ? '연구개발비 또는 매출 데이터 없음' : null,
+      direction: 'higher_is_better',
+      year: asOfFy,
+    }),
+  ];
 }
 
-// ── 지원 이력 집계 ───────────────────────────────────────────
+function inclusiveOverlapDays(startA: string, endA: string, startB: string, endB: string): number {
+  const start = Math.max(Date.parse(startA), Date.parse(startB));
+  const end = Math.min(Date.parse(endA), Date.parse(endB));
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start > end) return 0;
+  return Math.floor((end - start) / 86_400_000) + 1;
+}
+
+function hasConsecutiveYears(years: number[], required: number): boolean {
+  if (years.length < required) return false;
+  for (let index = 0; index <= years.length - required; index += 1) {
+    let consecutive = true;
+    for (let offset = 1; offset < required; offset += 1) {
+      if (years[index + offset] !== years[index] + offset) consecutive = false;
+    }
+    if (consecutive) return true;
+  }
+  return false;
+}
 
 export function buildSupportSummary(episodes: SupportEpisode[]): SupportSummary {
-  const years_received = [...new Set(
-    episodes.map(e => e.source_year).filter(Boolean)
-  )].sort() as number[];
+  const threshold = getThreshold();
+  const yearsReceived = [...new Set(episodes
+    .map(episode => episode.selected_date ? Number(episode.selected_date.slice(0, 4)) : episode.source_year)
+    .filter(Number.isFinite))]
+    .sort((a, b) => a - b);
+  const overlapPairs: SupportSummary['overlap_pairs'] = [];
 
-  const is_consecutive_3yr = [2022, 2023, 2024].every(y => years_received.includes(y));
-  const total_amount_million = episodes.reduce(
-    (s, e) => s + ((e.total_amount ?? 0) / 1000), 0
-  );
-
-  // 겹치는 기간 찾기
-  const overlap_pairs: Array<{ ep1_id: string; ep2_id: string; overlap_days: number }> = [];
-  for (let i = 0; i < episodes.length; i++) {
-    for (let j = i + 1; j < episodes.length; j++) {
-      const a = episodes[i];
-      const b = episodes[j];
+  for (let left = 0; left < episodes.length; left += 1) {
+    for (let right = left + 1; right < episodes.length; right += 1) {
+      const a = episodes[left];
+      const b = episodes[right];
       if (!a.start_date || !a.end_date || !b.start_date || !b.end_date) continue;
-      const overlapStart = a.start_date > b.start_date ? a.start_date : b.start_date;
-      const overlapEnd = a.end_date < b.end_date ? a.end_date : b.end_date;
-      if (overlapStart < overlapEnd) {
-        overlap_pairs.push({
-          ep1_id: a.episode_id,
-          ep2_id: b.episode_id,
-          overlap_days: Math.round(daysBetween(overlapStart, overlapEnd)),
-        });
+      const overlapDays = inclusiveOverlapDays(a.start_date, a.end_date, b.start_date, b.end_date);
+      if (overlapDays >= threshold.support_history.overlap_days_threshold) {
+        overlapPairs.push({ ep1_id: a.episode_id, ep2_id: b.episode_id, overlap_days: overlapDays });
       }
     }
   }
 
   return {
     total_episodes: episodes.length,
-    total_amount_million: Math.round(total_amount_million),
-    years_received,
-    is_consecutive_3yr,
-    episode_list: episodes.map(e => ({
-      episode_id: e.episode_id,
-      program_name: e.program_name,
-      biz_type: e.biz_type,
-      selected_date: e.selected_date,
-      total_amount_million: Math.round((e.total_amount ?? 0) / 1000),
-      component_count: e.component_count,
+    total_amount_million: Math.round(episodes.reduce((sum, episode) => sum + (episode.total_amount ?? 0), 0) / 1000),
+    missing_amount_count: episodes.filter(episode => episode.total_amount === null).length,
+    years_received: yearsReceived,
+    is_consecutive_3yr: hasConsecutiveYears(yearsReceived, threshold.support_history.consecutive_years_caution),
+    episode_list: episodes.map(episode => ({
+      episode_id: episode.episode_id,
+      program_name: episode.program_name,
+      biz_type: episode.biz_type,
+      selected_date: episode.selected_date,
+      total_amount_million: Math.round((episode.total_amount ?? 0) / 1000),
+      component_count: episode.component_count,
     })),
-    overlap_pairs,
+    overlap_pairs: overlapPairs,
   };
 }
 
-// ── 추가 확인 질문 생성 ───────────────────────────────────────
-
 export function generateFollowUpQuestions(
   master: CompanyMaster,
-  summary_checks: SixBoxCheck[],
-  support_summary: SupportSummary
+  summaryChecks: SixBoxCheck[],
+  supportSummary: SupportSummary,
 ): string[] {
-  const questions: string[] = [];
+  const questions = summaryChecks
+    .filter(check => check.status === 'red' || check.status === 'yellow')
+    .map(check => `[${check.status === 'red' ? '필수 확인' : '확인 권장'}] ${check.label}: ${check.note || check.value}`);
 
-  const redChecks = summary_checks.filter(c => c.status === 'red');
-  const yellowChecks = summary_checks.filter(c => c.status === 'yellow');
-
-  for (const c of redChecks) {
-    questions.push(`[필수 확인] ${c.label}: ${c.note || c.value}`);
+  if (supportSummary.overlap_pairs.length > 0) {
+    questions.push(`[지원 이력] 30일 이상 기간 중첩 ${supportSummary.overlap_pairs.length}쌍의 목적·비용 중복 여부 확인`);
   }
-  for (const c of yellowChecks) {
-    questions.push(`[확인 권장] ${c.label}: ${c.note || c.value}`);
+  if (supportSummary.missing_amount_count > 0) {
+    questions.push(`[지원 이력] 지원금 미상 episode ${supportSummary.missing_amount_count}건의 집행액 확인`);
   }
-
-  if (support_summary.is_consecutive_3yr) {
-    questions.push('[지원 이력] 3년 연속 수혜 기업 — 지원 효과 및 자립도 확인 필요');
-  }
-  if (support_summary.overlap_pairs.length > 0) {
-    questions.push(`[이력 중복] ${support_summary.overlap_pairs.length}건 지원 기간 겹침 확인 필요`);
-  }
-  if (!master.founded_date) {
-    questions.push('[기본 정보] 설립일자 미확인 — 업력 계산 불가');
-  }
-
+  if (!master.founded_date) questions.push('[기본 정보] 설립일자 확인 필요');
   return questions;
 }

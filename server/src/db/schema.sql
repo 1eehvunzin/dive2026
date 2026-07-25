@@ -201,6 +201,23 @@ CREATE TABLE IF NOT EXISTS program_document (
   parser_version TEXT
 );
 
+CREATE TABLE IF NOT EXISTS program_master (
+  program_id          TEXT PRIMARY KEY,
+  title               TEXT NOT NULL,
+  agency              TEXT,
+  field               TEXT,
+  budget_text         TEXT,
+  support_per_company_text TEXT,
+  deadline            TEXT,
+  target_stage_text   TEXT,
+  keywords_json       TEXT DEFAULT '[]',
+  description         TEXT,
+  document_id         TEXT,
+  review_status       TEXT DEFAULT 'draft',
+  created_at          TEXT NOT NULL,
+  updated_at          TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS program_requirement (
   requirement_id  TEXT PRIMARY KEY,
   program_id      TEXT,
@@ -211,6 +228,21 @@ CREATE TABLE IF NOT EXISTS program_requirement (
   source_page     INTEGER,
   source_text     TEXT,
   review_status   TEXT DEFAULT 'draft'
+);
+
+CREATE TABLE IF NOT EXISTS indicator_evidence (
+  evidence_id        TEXT PRIMARY KEY,
+  company_id         INTEGER,
+  indicator_code     TEXT,
+  source_file        TEXT,
+  source_sheet_page  TEXT,
+  source_row_cell    TEXT,
+  reference_year     INTEGER,
+  raw_value          TEXT,
+  normalized_value   TEXT,
+  formula            TEXT,
+  formula_version    TEXT,
+  external_dataset_id TEXT
 );
 
 -- ── 평가 회차 ────────────────────────────────────────────────
@@ -242,3 +274,7 @@ CREATE INDEX IF NOT EXISTS idx_ntis_company ON ntis_project(company_id);
 CREATE INDEX IF NOT EXISTS idx_master_ksic ON company_master(ksic3, size);
 CREATE INDEX IF NOT EXISTS idx_episode_dates ON support_episode(selected_date, as_of_fy);
 CREATE INDEX IF NOT EXISTS idx_bok_code ON external_industry_benchmark(ksic_code, reference_year);
+CREATE INDEX IF NOT EXISTS idx_region_code ON regional_industry_context(region_name, ksic_code, reference_year);
+CREATE INDEX IF NOT EXISTS idx_requirement_program ON program_requirement(program_id, review_status);
+CREATE INDEX IF NOT EXISTS idx_round_candidate_round ON round_candidate(round_id, company_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_company ON indicator_evidence(company_id, indicator_code);

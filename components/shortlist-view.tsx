@@ -4,7 +4,6 @@ import { CheckSquare, Building2, MapPin, Users, X, ArrowUpRight, Coins } from "l
 import { Button } from "@/components/ui/button"
 import { FinancialRiskBadge } from "@/components/financial-risk-badge"
 import { companies, type Company, type ProgramRecord } from "@/lib/mock-data"
-import { cn } from "@/lib/utils"
 
 export function ShortlistView({
   records,
@@ -19,7 +18,9 @@ export function ShortlistView({
 }) {
   const groups = records.map((r) => ({
     record: r,
-    picked: companies.filter((c) => r.shortlist.includes(c.id)).sort((a, b) => b.matchScore - a.matchScore),
+    picked: companies
+      .filter((c) => r.shortlist.includes(c.id))
+      .sort((a, b) => (b.financials.at(-1)?.revenue ?? -Infinity) - (a.financials.at(-1)?.revenue ?? -Infinity)),
   }))
   const totalPicked = groups.reduce((s, g) => s + g.picked.length, 0)
 
@@ -82,9 +83,6 @@ export function ShortlistView({
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <h3 className="truncate font-semibold text-foreground">{c.name}</h3>
-                            <span className="rounded bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-secondary-foreground">
-                              {c.stage}
-                            </span>
                             <FinancialRiskBadge company={c} />
                           </div>
                           <p className="mt-0.5 line-clamp-1 text-sm text-muted-foreground">{c.oneLiner}</p>
@@ -103,21 +101,18 @@ export function ShortlistView({
                             </span>
                             <span className="inline-flex items-center gap-1">
                               <Coins className="h-3.5 w-3.5" />
-                              {c.fundingTotal}
+                              누적 지원 {c.supportTotal}
                             </span>
                           </div>
                         </div>
                       </button>
                       <div className="flex items-center gap-4 border-t border-border pt-3 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0">
                         <div className="text-right">
-                          <p className="text-xs text-muted-foreground">매칭</p>
-                          <p
-                            className={cn(
-                              "text-sm font-semibold tabular-nums",
-                              c.matchScore >= 90 ? "text-success" : c.matchScore >= 80 ? "text-primary" : "text-warning",
-                            )}
-                          >
-                            {c.matchScore}점
+                          <p className="text-xs text-muted-foreground">최근 매출</p>
+                          <p className="text-sm font-semibold tabular-nums text-foreground">
+                            {c.financials.at(-1)?.revenue == null
+                              ? "자료 없음"
+                              : `${c.financials.at(-1)?.revenue}${c.financialUnit}`}
                           </p>
                         </div>
                         <button

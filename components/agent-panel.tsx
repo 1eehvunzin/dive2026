@@ -4,37 +4,43 @@ import { useEffect, useRef, useState } from "react"
 import { Sparkles, X, Send, FileSearch, Quote, Loader2, ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { type Company, type ChatMessage } from "@/lib/mock-data"
+import { assessFinancialRisk } from "@/lib/risk"
 import { cn } from "@/lib/utils"
 
 function buildAnswer(company: Company, question: string, context?: string): ChatMessage {
   const q = question.toLowerCase()
   let content = ""
   const sources: { title: string; snippet: string }[] = []
+  const latest = company.financials.at(-1)
 
   if (q.includes("리스크") || q.includes("위험") || context?.includes("리스크")) {
-    content = `${company.name}의 핵심 리스크는 다음과 같이 정리됩니다.\n\n1) ${company.risks[0]}\n2) ${company.risks[1] ?? "추가 리스크는 제한적입니다."}\n\n지원 심사 관점에서는 이 리스크들이 지원금 집행 이후 성과 달성에 미치는 영향이 제한적이라고 판단됩니다. 특히 매출 성장세와 흑자 전환 흐름을 고려하면 재무적 완충력이 확보되어 있습니다.`
+    const risk = assessFinancialRisk(company)
+    const observed = [...company.risks, ...risk.signals]
+    content = `${company.name}에서 현재 데이터로 확인되는 위험·검토 신호입니다.\n\n${observed.map((item, index) => `${index + 1}) ${item}`).join("\n") || "현재 데이터에서 규칙 임계치를 넘은 신호는 확인되지 않았습니다."}\n\n${risk.unavailable.length > 0 ? `${risk.unavailable.join("·")}은 원천 필드가 없어 판단에서 제외했습니다. 결측을 안전으로 해석하면 안 됩니다.` : "이 결과는 확인된 필드만 사용한 1차 검토이며 생존 가능성을 보장하지 않습니다."}`
     sources.push(
       { title: "기업 리포트 · 리스크 분석", snippet: company.risks[0] },
-      { title: "재무제표 · 2025 요약", snippet: company.report.finance.slice(0, 60) + "..." },
+      { title: `재무 데이터 · ${latest?.year ?? "기준연도 미상"}`, snippet: company.report.finance.slice(0, 60) + "..." },
     )
   } else if (q.includes("매출") || q.includes("재무") || q.includes("성장")) {
-    const last = company.financials[company.financials.length - 1]
-    content = `${company.name}의 재무 지표를 요약하면, 2025년 매출 ${last.revenue}억 원, 영업이익 ${last.operatingProfit}억 원입니다.\n\n${company.report.finance}\n\n최근 4개년 매출이 지속 성장하고 있어 지원사업의 사업화 가능성 항목에서 높은 점수를 받았습니다.`
+    const revenue = latest?.revenue === null || latest?.revenue === undefined ? "자료 없음" : `${latest.revenue}${company.financialUnit}`
+    const profit = latest?.operatingProfit === null || latest?.operatingProfit === undefined ? "자료 없음" : `${latest.operatingProfit}${company.financialUnit}`
+    content = `${company.name}의 최신 수록 재무연도는 ${latest?.year ?? "확인 불가"}년이며, 매출은 ${revenue}, 영업이익은 ${profit}입니다.\n\n${company.report.finance}\n\n이 수치만으로 사업화 가능성이나 지원 효과를 단정하지 않습니다.`
     sources.push(
-      { title: "재무제표 · 최근 4개년", snippet: `매출 ${company.financials.map((f) => f.revenue).join(" → ")}억` },
+      { title: "재무제표 · 수록 연도", snippet: `매출 ${company.financials.map((f) => f.revenue ?? "결측").join(" → ")} ${company.financialUnit}` },
       { title: "기업 리포트 · 재무 분석", snippet: company.report.finance.slice(0, 70) + "..." },
     )
   } else if (q.includes("기술") || q.includes("특허") || context?.includes("기술")) {
-    content = `기술 경쟁력 측면에서 ${company.name}은(는) 특허 ${company.patents}건을 보유하고 있습니다.\n\n${company.report.technology}\n\n평가 항목 중 '기술 적합성'에서 ${company.scoreBreakdown[0].score}점으로 가장 높은 점수를 받았습니다.`
+    content = `${company.name}의 데이터에 등록 특허 ${company.patents}건과 인증 ${company.certifications.length}건이 수록되어 있습니다.\n\n${company.report.technology}\n\n특허·인증 건수는 기술의 품질이나 공고 적합성을 직접 증명하지 않으므로 원문과 유효상태 확인이 필요합니다.`
     sources.push(
       { title: "기업 리포트 · 기술 분석", snippet: company.report.technology.slice(0, 70) + "..." },
       { title: "특허 등록 현황", snippet: `등록 특허 ${company.patents}건 · 핵심 공정 보호` },
     )
   } else if (q.includes("시장") || q.includes("전망")) {
-    content = `${company.report.market}\n\n시장 성장성과 ${company.name}의 포지셔닝을 종합할 때, 지원사업 취지에 부합하는 확장 잠재력을 갖추고 있습니다.`
+    content = `${company.report.market}\n\n위 서술은 현재 리포트에 수록된 내용입니다. 출처·기준연도가 연결되기 전에는 시장규모나 성장 전망을 확정 사실로 사용하지 마세요.`
     sources.push({ title: "기업 리포트 · 시장 분석", snippet: company.report.market.slice(0, 70) + "..." })
   } else {
-    content = `질문하신 내용을 기업 리포트와 재무 데이터를 바탕으로 분석했습니다.\n\n${company.report.summary}\n\n추가로 매칭 점수는 ${company.matchScore}점이며, 가장 높은 평가 항목은 '${company.scoreBreakdown.sort((a, b) => b.score - a.score)[0].label}'입니다. 더 구체적인 항목(재무, 기술, 리스크, 시장)을 지정해 질문하시면 근거 문서와 함께 상세히 답변드립니다.`
+    const highest = [...company.scoreBreakdown].sort((a, b) => b.score - a.score)[0]
+    content = `현재 리포트에 수록된 요약입니다.\n\n${company.report.summary}\n\n${highest ? `화면의 공고 평가 예시 중 가장 높은 항목은 '${highest.label}'이지만, 공고 원문 근거가 연결되기 전에는 선정 점수로 사용하지 않습니다.` : "공고 평가항목은 아직 연결되지 않았습니다."} 재무·기술·리스크처럼 확인할 범위를 지정해 질문해 주세요.`
     sources.push(
       { title: "기업 리포트 · 종합 요약", snippet: company.report.summary.slice(0, 70) + "..." },
       { title: "평가 점수 산정 내역", snippet: company.scoreBreakdown.map((s) => `${s.label} ${s.score}`).join(" · ") },
@@ -66,10 +72,12 @@ export function AgentPanel({
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (pendingContext) {
+    if (!pendingContext) return
+    const timer = window.setTimeout(() => {
       setContext(pendingContext)
       onContextConsumed()
-    }
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [pendingContext, onContextConsumed])
 
   useEffect(() => {
@@ -119,7 +127,7 @@ export function AgentPanel({
             </div>
             <div className="leading-tight">
               <p className="text-sm font-semibold text-foreground">리포트 AI 에이전트</p>
-              <p className="text-xs text-muted-foreground">RAG · {company.name} 문서 기반</p>
+              <p className="text-xs text-muted-foreground">현재 리포트 필드 · {company.name}</p>
             </div>
           </div>
           <button onClick={onClose} className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary">
@@ -133,7 +141,7 @@ export function AgentPanel({
               <FileSearch className="mx-auto h-8 w-8 text-muted-foreground" />
               <p className="mt-2 text-sm font-medium text-foreground">리포트에서 궁금한 부분을 드래그하세요</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                선택한 문장을 근거로 사내 문서·재무 데이터를 검색해 답변합니다
+                선택한 문장과 현재 화면에 수록된 재무 필드 범위에서 답변합니다
               </p>
             </div>
           )}
@@ -178,7 +186,7 @@ export function AgentPanel({
           {thinking && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              문서를 검색하고 답변을 생성하는 중...
+              현재 리포트 필드를 확인하는 중...
             </div>
           )}
         </div>

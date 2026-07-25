@@ -1,0 +1,18 @@
+{
+  "survival": {
+    "revenue_pctl_caution": 30,
+    "tenure_caution_years": 3,
+    "employment_pctl_caution": 30,
+    "min_employees_viable": 2
+  },
+  "financial": {
+    "debt_ratio_warning": 200,
+    "debt_ratio_caution": 100,
+    "op_margin_caution_pct": 0
+  },
+  "support_history": {
+    "repeat_episode_caution": 5,
+    "consecutive_years_caution": 3,
+    "overlap_days_threshold": 30
+  }
+}

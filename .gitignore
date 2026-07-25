@@ -16,4 +16,5 @@ node_modules
 # DIVE2026 backend
 server/.env
 server/dive2026.db
+server/dive2026.db-*
 server/dist/

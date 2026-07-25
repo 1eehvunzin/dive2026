@@ -1,6 +1,6 @@
 "use client"
 
-type BarDatum = { label: string; value: number }
+type BarDatum = { label: string; value: number | null }
 
 export function TrendBars({
   data,
@@ -13,15 +13,15 @@ export function TrendBars({
   colorVar?: string
   formatValue?: (v: number) => string
 }) {
-  const max = Math.max(...data.map((d) => Math.abs(d.value)), 1)
+  const max = Math.max(...data.map((d) => Math.abs(d.value ?? 0)), 1)
   return (
     <div className="flex items-end gap-3" style={{ height }}>
       {data.map((d) => {
-        const h = Math.max((Math.abs(d.value) / max) * (height - 28), 3)
-        const negative = d.value < 0
+        const h = d.value === null ? 0 : Math.max((Math.abs(d.value) / max) * (height - 28), 3)
+        const negative = d.value !== null && d.value < 0
         return (
           <div key={d.label} className="flex flex-1 flex-col items-center justify-end gap-1.5">
-            <span className="text-xs font-medium tabular-nums text-foreground">{formatValue(d.value)}</span>
+            <span className="text-xs font-medium tabular-nums text-foreground">{d.value === null ? "–" : formatValue(d.value)}</span>
             <div
               className="w-full rounded-t-md transition-all"
               style={{
@@ -84,7 +84,7 @@ export function ForecastLine({
   const connector = `M${lastHist[0]},${lastHist[1]} L${toXY(forecast[0].value, forecastStartIndex + 1)[0]},${toXY(forecast[0].value, forecastStartIndex + 1)[1]}`
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="w-full" role="img" aria-label="매출 예측 추이 그래프">
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full" role="img" aria-label="매출 실적과 시나리오 가정값 추이 그래프">
       {[0, 0.25, 0.5, 0.75, 1].map((t) => {
         const y = padY + t * (height - padY * 2)
         return <line key={t} x1={padX} y1={y} x2={width - padX} y2={y} stroke="var(--border)" strokeWidth={1} />
@@ -96,7 +96,7 @@ export function ForecastLine({
         const [x, y] = toXY(p.value, i)
         const isForecast = i > forecastStartIndex
         return (
-          <g key={p.label}>
+          <g key={`${p.label}-${i}`}>
             <circle cx={x} cy={y} r={3.5} fill={isForecast ? "var(--chart-3)" : "var(--chart-1)"} />
             <text x={x} y={height - 4} textAnchor="middle" className="fill-muted-foreground" style={{ fontSize: 11 }}>
               {p.label}
@@ -175,28 +175,34 @@ export function MultiAreaLine({
         const validPts = pts.filter((p): p is [number, number] => p !== null)
         if (validPts.length === 0) return null
 
-        const linePath = pts
-          .reduce<string>((acc, p, i) => {
-            if (!p) return acc
-            const cmd = acc === "" ? "M" : "L"
-            return `${acc} ${cmd}${p[0]},${p[1]}`
-          }, "")
-          .trim()
-
-        const areaPath = s.fill
-          ? `${linePath} L${validPts[validPts.length - 1][0]},${zeroY} L${validPts[0][0]},${zeroY} Z`
-          : ""
+        const segments: [number, number][][] = []
+        for (const point of pts) {
+          if (point) {
+            const current = segments.at(-1)
+            if (current && current.length > 0) current.push(point)
+            else segments.push([point])
+          } else if (segments.at(-1)?.length) {
+            segments.push([])
+          }
+        }
+        const nonEmptySegments = segments.filter((segment) => segment.length > 0)
 
         const color = `var(${s.colorVar})`
 
         return (
           <g key={s.label}>
-            {s.fill && areaPath && (
-              <path d={areaPath} fill={color} fillOpacity={0.12} />
-            )}
-            <path d={linePath} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
-            {validPts.map(([x, y], pi) => (
-              <circle key={pi} cx={x} cy={y} r={3} fill={color} />
+            {nonEmptySegments.map((segment, segmentIndex) => {
+              const linePath = segment.map(([x, y], index) => `${index === 0 ? "M" : "L"}${x},${y}`).join(" ")
+              const areaPath = `${linePath} L${segment.at(-1)![0]},${zeroY} L${segment[0][0]},${zeroY} Z`
+              return (
+                <g key={segmentIndex}>
+                  {s.fill && <path d={areaPath} fill={color} fillOpacity={0.12} />}
+                  <path d={linePath} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+                </g>
+              )
+            })}
+            {pts.map((point, pointIndex) => point && (
+              <circle key={pointIndex} cx={point[0]} cy={point[1]} r={3} fill={color} />
             ))}
           </g>
         )
@@ -204,7 +210,7 @@ export function MultiAreaLine({
 
       {/* X labels */}
       {xLabels.map((lbl, i) => (
-        <text key={lbl} x={toX(i)} y={height - 2} textAnchor="middle" style={{ fontSize: 11 }} className="fill-muted-foreground">
+        <text key={`${lbl}-${i}`} x={toX(i)} y={height - 2} textAnchor="middle" style={{ fontSize: 11 }} className="fill-muted-foreground">
           {lbl}
         </text>
       ))}
@@ -299,29 +305,32 @@ export function RadarChart({
 export function PercentileStrip({
   items,
 }: {
-  items: { label: string; pctl: number; cohortLabel?: string }[]
+  items: { label: string; pctl: number; cohortLabel?: string; higherIsBetter?: boolean }[]
 }) {
   return (
     <div className="space-y-3.5">
       {items.map((item) => {
-        const pct = Math.max(0, Math.min(100, item.pctl))
-        const tier = pct >= 70 ? "text-success" : pct >= 40 ? "text-warning" : "text-destructive"
+        const rawPct = Math.max(0, Math.min(100, item.pctl))
+        const favorablePct = item.higherIsBetter === false ? 100 - rawPct : rawPct
+        const tier = favorablePct >= 70 ? "text-success" : favorablePct >= 40 ? "text-warning" : "text-destructive"
         return (
           <div key={item.label}>
             <div className="mb-1 flex items-center justify-between text-sm">
               <span className="text-foreground/90">{item.label}</span>
-              <span className={`font-semibold tabular-nums ${tier}`}>상위 {100 - pct}%</span>
+              <span className={`font-semibold tabular-nums ${tier}`}>
+                유리도 상위 {Math.max(1, Math.round(100 - favorablePct))}%
+              </span>
             </div>
             <div className="relative h-2 w-full overflow-hidden rounded-full bg-secondary">
               {/* Color zone */}
               <div
                 className="absolute inset-y-0 left-0 rounded-full transition-all duration-700"
                 style={{
-                  width: `${pct}%`,
+                  width: `${favorablePct}%`,
                   background:
-                    pct >= 70
+                    favorablePct >= 70
                       ? "var(--success)"
-                      : pct >= 40
+                      : favorablePct >= 40
                       ? "var(--warning)"
                       : "var(--destructive)",
                   opacity: 0.8,
@@ -347,6 +356,7 @@ export function SupportDots({ events }: { events: SupportEvent[] }) {
   const minY = Math.min(...years)
   const maxY = Math.max(...years)
   const spanY = maxY - minY || 1
+  const occurrenceByYear = new Map<number, number>()
 
   return (
     <div className="relative pt-4 pb-2">
@@ -357,11 +367,14 @@ export function SupportDots({ events }: { events: SupportEvent[] }) {
       <div className="relative flex" style={{ height: 56 }}>
         {events.map((ev, i) => {
           const posLeft = ((ev.year - minY) / spanY) * 100
+          const occurrence = occurrenceByYear.get(ev.year) ?? 0
+          occurrenceByYear.set(ev.year, occurrence + 1)
+          const horizontalOffset = occurrence * 14
           return (
             <div
               key={i}
               className="absolute flex flex-col items-center"
-              style={{ left: `calc(${posLeft}% + 1rem - 6px)` }}
+              style={{ left: `calc(${posLeft}% + 1rem - 6px + ${horizontalOffset}px)` }}
             >
               <div className="h-3 w-3 rounded-full border-2 border-primary bg-card" title={ev.program} />
               <span className="mt-1 whitespace-nowrap text-[10px] font-medium text-foreground">{ev.year}</span>
@@ -388,7 +401,7 @@ export function SupportDots({ events }: { events: SupportEvent[] }) {
 export function BenchmarkBars({
   items,
 }: {
-  items: { label: string; company: number; industry: number; unit: string }[]
+  items: { label: string; company: number; industry: number; unit: string; higherIsBetter?: boolean }[]
 }) {
   return (
     <div className="space-y-4">
@@ -396,7 +409,7 @@ export function BenchmarkBars({
         const max = Math.max(item.company, item.industry, 1)
         const companyPct = (item.company / max) * 100
         const industryPct = (item.industry / max) * 100
-        const better = item.company >= item.industry
+        const better = item.higherIsBetter === false ? item.company <= item.industry : item.company >= item.industry
         return (
           <div key={item.label}>
             <div className="mb-1.5 flex items-center justify-between text-sm">
@@ -439,38 +452,6 @@ export function BenchmarkBars({
           </div>
         )
       })}
-    </div>
-  )
-}
-
-// ── ScoreRing ──────────────────────────────────────────────────────────────────
-export function ScoreRing({ score, size = 132 }: { score: number; size?: number }) {
-  const stroke = 10
-  const r = (size - stroke) / 2
-  const c = 2 * Math.PI * r
-  const offset = c - (score / 100) * c
-  const color = score >= 90 ? "var(--success)" : score >= 80 ? "var(--chart-1)" : "var(--warning)"
-  return (
-    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--border)" strokeWidth={stroke} />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          stroke={color}
-          strokeWidth={stroke}
-          strokeDasharray={c}
-          strokeDashoffset={offset}
-          strokeLinecap="round"
-          style={{ transition: "stroke-dashoffset 0.8s ease" }}
-        />
-      </svg>
-      <div className="absolute flex flex-col items-center">
-        <span className="text-3xl font-semibold tabular-nums text-foreground">{score}</span>
-        <span className="text-xs text-muted-foreground">매칭 점수</span>
-      </div>
     </div>
   )
 }
