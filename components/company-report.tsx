@@ -8,7 +8,6 @@ import {
   Calendar,
   Award,
   MessageSquareQuote,
-  Sparkles,
   ShieldAlert,
   CheckCircle2,
   Building2,
@@ -18,7 +17,9 @@ import {
 import { Button } from "@/components/ui/button"
 import { ScoreRing, TrendBars } from "@/components/charts"
 import { InvestmentSim } from "@/components/investment-sim"
+import { FinancialRiskBadge } from "@/components/financial-risk-badge"
 import { type Company } from "@/lib/mock-data"
+import { assessFinancialRisk } from "@/lib/risk"
 import { cn } from "@/lib/utils"
 
 type Tab = "overview" | "financials" | "evaluation" | "forecast"
@@ -27,21 +28,19 @@ const tabs: { id: Tab; label: string }[] = [
   { id: "overview", label: "기업 개요" },
   { id: "financials", label: "재무 분석" },
   { id: "evaluation", label: "평가 상세" },
-  { id: "forecast", label: "모의 투자 예측" },
+  { id: "forecast", label: "모의 지원 예측" },
 ]
 
 export function CompanyReport({
   company,
   onBack,
   onAsk,
-  onOpenAgent,
   picked,
   onToggleShortlist,
 }: {
   company: Company
   onBack: () => void
   onAsk: (context: string) => void
-  onOpenAgent: () => void
   picked: boolean
   onToggleShortlist: () => void
 }) {
@@ -89,11 +88,7 @@ export function CompanyReport({
             className="gap-1.5"
           >
             {picked ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
-            {picked ? "선정됨" : "선정 목록에 추가"}
-          </Button>
-          <Button size="sm" onClick={onOpenAgent} className="gap-1.5">
-            <Sparkles className="h-3.5 w-3.5" />
-            AI 에이전트 열기
+            {picked ? "즐겨찾기됨" : "즐겨찾기에 추가"}
           </Button>
         </div>
       </div>
@@ -106,11 +101,12 @@ export function CompanyReport({
               {company.logoSeed}
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-semibold text-foreground">{company.name}</h1>
                 <span className="rounded bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
                   {company.stage}
                 </span>
+                <FinancialRiskBadge company={company} />
               </div>
               <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground">{company.oneLiner}</p>
               <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
@@ -158,6 +154,13 @@ export function CompanyReport({
         </div>
       </section>
 
+      {tab !== "forecast" && (
+        <div className="mt-6 flex items-center gap-2 rounded-lg border border-dashed border-primary/30 bg-primary/5 px-4 py-3 text-sm text-muted-foreground">
+          <MessageSquareQuote className="h-4 w-4 text-primary" />
+          리포트 본문에서 궁금한 문장을 <span className="font-medium text-foreground">드래그</span>하면 AI 에이전트에게 근거와 함께 질문할 수 있습니다.
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="mt-6 flex gap-1 border-b border-border">
         {tabs.map((t) => (
@@ -193,13 +196,6 @@ export function CompanyReport({
         {tab === "evaluation" && <EvaluationTab company={company} />}
         {tab === "forecast" && <InvestmentSim company={company} />}
       </div>
-
-      {tab !== "forecast" && (
-        <div className="mt-6 flex items-center gap-2 rounded-lg border border-dashed border-primary/30 bg-primary/5 px-4 py-3 text-sm text-muted-foreground">
-          <MessageSquareQuote className="h-4 w-4 text-primary" />
-          리포트 본문에서 궁금한 문장을 <span className="font-medium text-foreground">드래그</span>하면 AI 에이전트에게 근거와 함께 질문할 수 있습니다.
-        </div>
-      )}
     </div>
   )
 }
@@ -256,8 +252,46 @@ function OverviewTab({ company }: { company: Company }) {
 
 function FinancialsTab({ company }: { company: Company }) {
   const last = company.financials[company.financials.length - 1]
+  const risk = assessFinancialRisk(company)
   return (
     <div className="space-y-4">
+      <div className="rounded-xl border border-border bg-card p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="flex items-center gap-2 font-semibold text-foreground">
+            <ShieldAlert className="h-4.5 w-4.5 text-primary" />
+            재무 건전성 · 신용
+          </h3>
+          <FinancialRiskBadge company={company} />
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            { label: "신용등급", value: company.creditGrade },
+            { label: "부채비율", value: `${company.debtRatio}%` },
+            { label: "유동비율", value: `${company.currentRatio}%` },
+            { label: "잔여 런웨이", value: company.runwayMonths !== null ? `${company.runwayMonths}개월` : "흑자 지속" },
+          ].map((k) => (
+            <div key={k.label} className="rounded-lg border border-border bg-secondary/40 p-3.5">
+              <p className="text-xs text-muted-foreground">{k.label}</p>
+              <p className="mt-1 text-sm font-semibold tabular-nums text-foreground">{k.value}</p>
+            </div>
+          ))}
+        </div>
+        {risk.signals.length > 0 ? (
+          <ul className="mt-4 space-y-2">
+            {risk.signals.map((s, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm leading-relaxed text-foreground/90">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-warning" />
+                {s}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+            부채비율·유동비율·자금 런웨이 모두 안정 범위 내에 있어 지원 기간 중 재무적 리스크 신호가 확인되지 않습니다.
+          </p>
+        )}
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-xl border border-border bg-card p-6">
           <h3 className="mb-4 font-semibold text-foreground">매출 추이 (억 원)</h3>

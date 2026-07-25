@@ -1,45 +1,43 @@
 "use client"
 
-import { Building2, CheckSquare, Clock } from "lucide-react"
+import { Building2, CheckSquare } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ViewId } from "@/lib/mock-data"
 
 const tabs: { id: ViewId; label: string; icon: typeof Building2; needsProgram: boolean }[] = [
   { id: "companies", label: "추천 기업", icon: Building2, needsProgram: false },
-  { id: "shortlist", label: "선정 목록", icon: CheckSquare, needsProgram: true },
-  { id: "history", label: "활동 히스토리", icon: Clock, needsProgram: true },
+  { id: "shortlist", label: "즐겨찾기", icon: CheckSquare, needsProgram: true },
 ]
 
 export function NavTabs({
   active,
   onNavigate,
   hasProgram,
+  onRequireProgram,
   shortlistCount = 0,
 }: {
   active: ViewId
   onNavigate: (id: ViewId) => void
   hasProgram: boolean
+  onRequireProgram: () => void
   shortlistCount?: number
 }) {
   return (
     <nav className="flex items-center gap-1" aria-label="주요 화면">
       {tabs.map((tab) => {
         const Icon = tab.icon
-        const disabled = tab.needsProgram && !hasProgram
-        const isActive = active === tab.id && !disabled
+        const needsRegistration = tab.needsProgram && !hasProgram
+        const isActive = active === tab.id && !needsRegistration
         return (
           <button
             key={tab.id}
-            onClick={() => !disabled && onNavigate(tab.id)}
-            disabled={disabled}
+            onClick={() => (needsRegistration ? onRequireProgram() : onNavigate(tab.id))}
             aria-current={isActive ? "page" : undefined}
             className={cn(
               "relative flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors",
-              disabled
-                ? "cursor-not-allowed text-sidebar-foreground/35"
-                : isActive
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+              isActive
+                ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
+                : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
             )}
           >
             <Icon className="h-4 w-4" />

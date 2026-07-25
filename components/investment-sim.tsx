@@ -37,7 +37,7 @@ export function InvestmentSim({ company }: { company: Company }) {
           <Sparkles className="h-4.5 w-4.5" />
         </div>
         <div>
-          <p className="text-sm font-semibold text-foreground">AI 모의 투자 · 지원 성과 예측</p>
+          <p className="text-sm font-semibold text-foreground">AI 모의 지원 성과 예측</p>
           <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">
             {company.name}에 지원사업 자금을 집행했을 때의 3개년 성과를 시나리오별로 시뮬레이션합니다. 과거 재무 추이와
             시장 성장률, 유사 기업 지원 사례를 학습해 산출한 예측치입니다.

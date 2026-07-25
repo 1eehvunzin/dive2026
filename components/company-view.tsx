@@ -21,7 +21,9 @@ import {
   X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { FinancialRiskBadge } from "@/components/financial-risk-badge"
 import { companies, type Company, type Program } from "@/lib/mock-data"
+import { assessFinancialRisk, riskTierOrder } from "@/lib/risk"
 import { cn } from "@/lib/utils"
 
 const revenueGrowth = (c: Company) =>
@@ -29,11 +31,12 @@ const revenueGrowth = (c: Company) =>
     ((c.financials[c.financials.length - 1].revenue - c.financials[0].revenue) / c.financials[0].revenue) * 100,
   )
 
-type SortKey = "recommended" | "recommended-asc" | "growth" | "employees"
+type SortKey = "recommended" | "recommended-asc" | "growth" | "employees" | "financial-risk"
 
 const sortOptions: { key: SortKey; label: string }[] = [
   { key: "recommended", label: "추천순" },
   { key: "recommended-asc", label: "추천 역순" },
+  { key: "financial-risk", label: "재무 안정순" },
   { key: "growth", label: "매출 성장순" },
   { key: "employees", label: "임직원 규모순" },
 ]
@@ -64,7 +67,7 @@ function RegisterBanner({ onRegister }: { onRegister: () => void }) {
           <h2 className="text-sm font-semibold text-foreground">지원사업 공고를 등록해 보세요</h2>
           <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground">
             지금은 전체 기업 풀을 기본 순위로 보고 있습니다. 공고문 PDF를 등록하면 사업 요건에 맞춘 맞춤 추천 순위와
-            기업 선정·리포트 기능을 사용할 수 있습니다.
+            기업 즐겨찾기·리포트 기능을 사용할 수 있습니다.
           </p>
         </div>
       </div>
@@ -154,11 +157,12 @@ function CompanyRow({
           {company.logoSeed}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h3 className="truncate font-semibold text-foreground">{company.name}</h3>
             <span className="rounded bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-secondary-foreground">
               {company.stage}
             </span>
+            <FinancialRiskBadge company={company} />
           </div>
           <p className="mt-0.5 line-clamp-1 text-sm text-muted-foreground">{company.oneLiner}</p>
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -191,7 +195,7 @@ function CompanyRow({
         {canSelect && (
           <button
             onClick={onToggle}
-            aria-label={picked ? "선정 목록에서 제거" : "선정 목록에 추가"}
+            aria-label={picked ? "즐겨찾기에서 제거" : "즐겨찾기에 추가"}
             className={cn(
               "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
               picked
@@ -200,7 +204,7 @@ function CompanyRow({
             )}
           >
             {picked ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
-            {picked ? "선정됨" : "선정"}
+            {picked ? "즐겨찾기됨" : "즐겨찾기"}
           </button>
         )}
       </div>
@@ -249,6 +253,8 @@ export function CompanyView({
     else if (sortKey === "recommended-asc") sorted.sort((a, b) => a.matchScore - b.matchScore)
     else if (sortKey === "growth") sorted.sort((a, b) => revenueGrowth(b) - revenueGrowth(a))
     else if (sortKey === "employees") sorted.sort((a, b) => b.employees - a.employees)
+    else if (sortKey === "financial-risk")
+      sorted.sort((a, b) => riskTierOrder[assessFinancialRisk(a).tier] - riskTierOrder[assessFinancialRisk(b).tier])
     return sorted
   }, [query, sortKey, industries, stages, locations])
 

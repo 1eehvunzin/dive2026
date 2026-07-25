@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Sparkles, X, Send, FileSearch, Quote, Loader2 } from "lucide-react"
+import { Sparkles, X, Send, FileSearch, Quote, Loader2, ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { type Company, type ChatMessage } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
@@ -48,12 +48,14 @@ export function AgentPanel({
   company,
   open,
   onClose,
+  onOpen,
   pendingContext,
   onContextConsumed,
 }: {
   company: Company
   open: boolean
   onClose: () => void
+  onOpen: () => void
   pendingContext: string | null
   onContextConsumed: () => void
 }) {
@@ -94,10 +96,20 @@ export function AgentPanel({
   return (
     <>
       {open && <div className="fixed inset-0 z-40 bg-foreground/20 lg:hidden" onClick={onClose} />}
+      {!open && (
+        <button
+          onClick={onOpen}
+          aria-label="AI 에이전트 열기"
+          className="fixed right-0 top-1/2 z-50 flex -translate-y-1/2 flex-col items-center gap-2 rounded-l-2xl border border-r-0 border-primary/30 bg-card px-2 py-4 text-primary shadow-lg transition-colors hover:bg-primary/5"
+        >
+          <ChevronLeft className="h-4.5 w-4.5" />
+          <span className="[writing-mode:vertical-rl] text-xs font-medium tracking-wide">AI 에이전트</span>
+        </button>
+      )}
       <div
         className={cn(
           "fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-border bg-card shadow-2xl transition-transform duration-300",
-          open ? "translate-x-0" : "translate-x-full",
+          open ? "translate-x-0" : "pointer-events-none translate-x-full",
         )}
       >
         <div className="flex items-center justify-between border-b border-border px-5 py-4">

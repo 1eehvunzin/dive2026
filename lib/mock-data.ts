@@ -45,6 +45,11 @@ export type Company = {
   financials: FinancialPoint[]
   patents: number
   certifications: string[]
+  creditGrade: string
+  debtRatio: number
+  currentRatio: number
+  /** 현재 자금 소진 속도 기준 잔여 개월 수. 최근 회계연도 흑자 전환 등으로 해당 없음이면 null. */
+  runwayMonths: number | null
   report: {
     summary: string
     market: string
@@ -110,6 +115,10 @@ export const companies: Company[] = [
     ],
     patents: 7,
     certifications: ["벤처기업 인증", "기업부설연구소", "ISO 27001"],
+    creditGrade: "AA-",
+    debtRatio: 45,
+    currentRatio: 210,
+    runwayMonths: null,
     report: {
       summary:
         "님버스에이아이는 제조 설비의 센서 데이터를 실시간 수집·분석하여 고장을 사전에 예측하는 예지보전 AI 솔루션을 제공한다. 2021년 설립 이후 국내 주요 제조사를 중심으로 레퍼런스를 빠르게 확보했으며, 반복 매출 기반의 SaaS 모델로 안정적인 성장세를 보이고 있다.",
@@ -162,6 +171,10 @@ export const companies: Company[] = [
     ],
     patents: 12,
     certifications: ["벤처기업 인증", "이노비즈", "기업부설연구소"],
+    creditGrade: "BBB+",
+    debtRatio: 92,
+    currentRatio: 155,
+    runwayMonths: 20,
     report: {
       summary:
         "버던트바이오는 정밀발효 기술을 활용해 동물성 단백질을 대체하는 식품소재를 개발한다. 지속가능성과 식량안보라는 거대 트렌드에 부합하며, 국내외 식품 대기업과의 공동개발을 통해 상용화 경로를 구축하고 있다.",
@@ -214,6 +227,10 @@ export const companies: Company[] = [
     ],
     patents: 5,
     certifications: ["벤처기업 인증", "기업부설연구소"],
+    creditGrade: "BBB",
+    debtRatio: 124,
+    currentRatio: 118,
+    runwayMonths: null,
     report: {
       summary:
         "루프모빌리티는 실내 물류센터를 위한 자율주행 운반로봇과 관제 소프트웨어를 제공한다. 물류 인력난과 이커머스 성장을 배경으로 자동화 수요가 구조적으로 증가하는 시장에 위치해 있다.",
@@ -266,6 +283,10 @@ export const companies: Company[] = [
     ],
     patents: 3,
     certifications: ["벤처기업 인증", "GS인증 1등급"],
+    creditGrade: "BB",
+    debtRatio: 58,
+    currentRatio: 112,
+    runwayMonths: 9,
     report: {
       summary:
         "콴타시큐어는 AI 이상행위 탐지 기술로 내부자에 의한 데이터 유출을 방지하는 보안 솔루션을 제공한다. 강화되는 정보보호 규제 환경에서 수요가 확대되고 있는 초기 성장 기업이다.",
@@ -318,6 +339,10 @@ export const companies: Company[] = [
     ],
     patents: 9,
     certifications: ["벤처기업 인증", "이노비즈", "기업부설연구소"],
+    creditGrade: "BBB-",
+    debtRatio: 138,
+    currentRatio: 96,
+    runwayMonths: null,
     report: {
       summary:
         "솔라리스에너지는 태양광·ESS 등 분산 에너지 자원을 묶어 하나의 발전소처럼 운영하는 가상발전소(VPP) 플랫폼을 제공한다. 탄소중립 정책과 전력시장 개방 흐름의 직접적 수혜 기업이다.",
@@ -340,18 +365,9 @@ export type ChatMessage = {
   context?: string
 }
 
-export type HistoryEvent = {
-  id: string
-  at: number
-  type: "registered" | "edited" | "added" | "removed" | "viewed"
-  label: string
-  detail?: string
-}
-
 export type ProgramRecord = {
   program: Program
   shortlist: string[]
-  history: HistoryEvent[]
 }
 
-export type ViewId = "companies" | "shortlist" | "history"
+export type ViewId = "companies" | "shortlist"
