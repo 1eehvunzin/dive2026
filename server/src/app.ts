@@ -45,7 +45,8 @@ export function createApp() {
     origin(origin, callback) {
       // Requests without Origin are server-to-server/CLI calls. Browser origins must
       // be explicitly present in the local defaults or FRONTEND_ORIGINS.
-      callback(null, !origin || allowedOrigins.has(origin));
+      const vercelApp = Boolean(origin && /^https:\/\/[^.]+\.vercel\.app$/.test(origin));
+      callback(null, !origin || allowedOrigins.has(origin) || vercelApp);
     },
   }));
   app.use(express.json({ limit: '2mb' }));

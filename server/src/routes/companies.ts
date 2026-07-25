@@ -29,8 +29,13 @@ function yearsSince(foundedDate: string | null, asOfFy: number): number | null {
   return Number.isFinite(year) ? Math.max(0, asOfFy - year) : null;
 }
 
+/**
+ * 공고 적합 점수는 "탈락 필터"가 아니라 정렬용 참고 점수다.
+ * 패널티를 과하게 주면 거의 전 기업이 0점에 몰려 목록이 비어 보이는 착시가 난다.
+ * 하드 게이트는 휴·폐업만 0점 처리한다.
+ */
 function matchProgram(row: CompanyQueryRow, program: ProgramMatchSource, asOfFy: number): ProgramMatch {
-  let score = 25;
+  let score = 40;
   const reasons: string[] = [];
   const tenure = yearsSince(row.founded_date, asOfFy);
   const programText = [
@@ -44,45 +49,67 @@ function matchProgram(row: CompanyQueryRow, program: ProgramMatchSource, asOfFy:
 
   if (/부산/.test(programText)) {
     if (row.region === '부산') {
-      score += 25;
+      score += 20;
       reasons.push('부산 소재 확인');
+    } else if (row.region) {
+      score -= 8;
+      reasons.push(`소재지 ${row.region} · 부산 공고 참고`);
     } else {
-      score -= 35;
-      reasons.push(`소재지 ${row.region || '미확인'} · 부산 요건 재검토`);
+      score -= 3;
+      reasons.push('소재지 미확인');
     }
   }
 
+  // "창업 N년 이내" — 초과해도 목록에서 지우지 않고 소폭 감점만
   const tenureMatch = programText.match(/(?:창업\s*)?(\d+)년\s*이내/);
   if (tenureMatch && tenure !== null) {
     const maximum = Number(tenureMatch[1]);
     if (tenure <= maximum) {
-      score += 25;
+      score += 20;
       reasons.push(`업력 ${tenure}년 · ${maximum}년 이내`);
+    } else if (tenure <= maximum + 3) {
+      score -= 6;
+      reasons.push(`업력 ${tenure}년 · 기준 ${maximum}년 소폭 초과`);
     } else {
-      score -= 35;
-      reasons.push(`업력 ${tenure}년 · ${maximum}년 초과`);
+      score -= 12;
+      reasons.push(`업력 ${tenure}년 · 기준 ${maximum}년 초과`);
     }
+  } else if (tenureMatch && tenure === null) {
+    score -= 2;
+    reasons.push('설립일 미확인 · 업력 대조 보류');
   }
 
+  // 규모 키워드는 공고에 "소기업" 등이 명시될 때만. 우대 가점 위주.
   const sizeTerms = ['소상공인', '소기업', '중기업', '중견기업', '대기업'];
   const requestedSizes = sizeTerms.filter(term => programText.includes(term));
   if (requestedSizes.length > 0 && row.size) {
     if (requestedSizes.includes(row.size)) {
-      score += 15;
+      score += 12;
       reasons.push(`${row.size} 대상 부합`);
     } else {
-      score -= 20;
-      reasons.push(`${row.size} · 대상 규모 재검토`);
+      score -= 5;
+      reasons.push(`${row.size} · 공고 규모 키워드와 상이`);
     }
   }
 
+  // 이노비즈 공고면 인증 가점
+  if (/이노비즈|INNO-?BIZ/i.test(programText) && row.inno_biz === 1) {
+    score += 10;
+    reasons.push('이노비즈 인증');
+  }
+  if (/벤처/.test(programText) && row.venture === 1) {
+    score += 8;
+    reasons.push('벤처기업 인증');
+  }
+
+  const stopwords = /^(지원|사업|기업|부산|모집|공고|대상|이내|센터|입주|임대|공간|교육|무료|주차|월|원|및|또는|관련|제공)$/;
   const tokens = [...new Set(programText
     .split(/[^가-힣A-Za-z0-9]+/)
     .map(token => token.trim())
-    .filter(token => token.length >= 2 && !/^(지원|사업|기업|부산|모집|공고|대상|이내)$/.test(token)))];
-  const matchedTokens = tokens.filter(token => companyText.includes(token)).slice(0, 3);
+    .filter(token => token.length >= 2 && !stopwords.test(token)))];
+  const matchedTokens = tokens.filter(token => companyText.includes(token)).slice(0, 4);
   if (matchedTokens.length > 0) {
-    score += Math.min(15, matchedTokens.length * 5);
+    score += Math.min(16, matchedTokens.length * 4);
     reasons.push(`업종·제품 연관: ${matchedTokens.join('·')}`);
   }
 
@@ -90,13 +117,13 @@ function matchProgram(row: CompanyQueryRow, program: ProgramMatchSource, asOfFy:
     score = 0;
     reasons.unshift(`${row.biz_status || '휴·폐업'} 상태`);
   } else {
-    score += 5;
+    score += 8;
     reasons.push('정상 영업 상태');
   }
-  if (row.equity !== null && row.equity > 0) score += 3;
-  if (row.op_margin_pct !== null && row.op_margin_pct > 0) score += 2;
+  if (row.equity !== null && row.equity > 0) score += 4;
+  if (row.op_margin_pct !== null && row.op_margin_pct > 0) score += 3;
 
-  return { score: Math.max(0, Math.min(100, Math.round(score))), reasons: reasons.slice(0, 3) };
+  return { score: Math.max(0, Math.min(100, Math.round(score))), reasons: reasons.slice(0, 4) };
 }
 
 const SORT_SQL: Record<string, string> = {
@@ -262,7 +289,24 @@ router.get('/', (req: Request, res: Response) => {
     )
     SELECT
       m.*,
-      y.*,
+      y.fiscal_year AS fiscal_year,
+      y.employees AS employees,
+      y.pension_enrolled AS pension_enrolled,
+      y.pension_hired AS pension_hired,
+      y.pension_left AS pension_left,
+      y.avg_salary AS avg_salary,
+      y.revenue AS revenue,
+      y.op_profit AS op_profit,
+      y.cost_of_sales AS cost_of_sales,
+      y.net_income AS net_income,
+      y.op_margin_pct AS op_margin_pct,
+      y.assets AS assets,
+      y.liabilities AS liabilities,
+      y.equity AS equity,
+      y.paid_capital AS paid_capital,
+      y.rd_expense AS rd_expense,
+      y.patent_reg AS patent_reg,
+      y.patent_applied AS patent_applied,
       COALESCE(s.support_total, 0) AS support_total,
       COALESCE(s.support_episode_count, 0) AS support_episode_count,
       COALESCE(s.support_missing_amount_count, 0) AS support_missing_amount_count,
@@ -326,7 +370,24 @@ router.get('/:id', (req: Request, res: Response) => {
     )
     SELECT
       m.*,
-      y.*,
+      y.fiscal_year AS fiscal_year,
+      y.employees AS employees,
+      y.pension_enrolled AS pension_enrolled,
+      y.pension_hired AS pension_hired,
+      y.pension_left AS pension_left,
+      y.avg_salary AS avg_salary,
+      y.revenue AS revenue,
+      y.op_profit AS op_profit,
+      y.cost_of_sales AS cost_of_sales,
+      y.net_income AS net_income,
+      y.op_margin_pct AS op_margin_pct,
+      y.assets AS assets,
+      y.liabilities AS liabilities,
+      y.equity AS equity,
+      y.paid_capital AS paid_capital,
+      y.rd_expense AS rd_expense,
+      y.patent_reg AS patent_reg,
+      y.patent_applied AS patent_applied,
       COALESCE((
         SELECT SUM(total_amount)
         FROM support_episode
