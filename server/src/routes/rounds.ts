@@ -1,6 +1,12 @@
 import crypto from 'crypto';
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db/connection';
+import {
+  parseDateOnly,
+  parsePositiveInteger,
+  parseUniquePositiveIntegerIds,
+  sendApiError,
+} from '../lib/http';
 import { buildReport, fiscalYearAvailableAt } from '../lib/report-engine';
 
 const router = Router();
@@ -18,54 +24,94 @@ const SORT_GETTERS: Record<string, (report: NonNullable<ReturnType<typeof buildR
 
 router.post('/', (req: Request, res: Response) => {
   const programId = typeof req.body?.programId === 'string' ? req.body.programId : null;
-  const candidateIds = Array.isArray(req.body?.companyIds)
-    ? [...new Set(req.body.companyIds.map((value: unknown) => Number.parseInt(String(value), 10)).filter(Number.isFinite))]
-    : [];
-  const asOfDate = typeof req.body?.asOfDate === 'string' ? req.body.asOfDate : new Date().toISOString().slice(0, 10);
-  const parsedDate = new Date(asOfDate);
-  if (Number.isNaN(parsedDate.getTime())) return res.status(400).json({ error: 'invalid asOfDate' });
-  if (candidateIds.length === 0 || candidateIds.length > 200) {
-    return res.status(400).json({ error: 'companyIds must contain 1-200 unique IDs' });
+  const candidateIds = parseUniquePositiveIntegerIds(req.body?.companyIds);
+  const requestedDate = req.body?.asOfDate ?? new Date().toISOString().slice(0, 10);
+  const parsedDate = parseDateOnly(requestedDate);
+  if (!parsedDate) return sendApiError(res, 400, 'INVALID_AS_OF_DATE', 'asOfDate must be a valid YYYY-MM-DD date');
+  if (!candidateIds || candidateIds.length === 0 || candidateIds.length > 200) {
+    return sendApiError(
+      res,
+      400,
+      'INVALID_COMPANY_IDS',
+      'companyIds must contain 1-200 unique positive integer IDs',
+    );
   }
   if (programId && !getDb().prepare('SELECT 1 FROM program_master WHERE program_id = ?').get(programId)) {
-    return res.status(404).json({ error: 'Program not found' });
+    return sendApiError(res, 404, 'PROGRAM_NOT_FOUND', 'Program not found');
+  }
+  const existingIds = new Set((getDb().prepare(`
+    SELECT company_id FROM company_master
+    WHERE company_id IN (${candidateIds.map(() => '?').join(',')})
+  `).all(...candidateIds) as Array<{ company_id: number }>).map(row => row.company_id));
+  const missingCompanyIds = candidateIds.filter(companyId => !existingIds.has(companyId));
+  if (missingCompanyIds.length > 0) {
+    return sendApiError(res, 404, 'COMPANY_NOT_FOUND', 'One or more companies were not found', {
+      companyIds: missingCompanyIds,
+    });
   }
 
   const roundId = `round-${crypto.randomUUID()}`;
-  const asOfFy = fiscalYearAvailableAt(parsedDate);
-  getDb().transaction(() => {
-    getDb().prepare(`
-      INSERT INTO round_master (round_id, program_id, as_of_date, as_of_fy, status)
-      VALUES (?, ?, ?, ?, 'active')
-    `).run(roundId, programId, asOfDate, asOfFy);
-    const insert = getDb().prepare(`
-      INSERT INTO round_candidate (round_id, company_id, application_status, reviewer_status)
-      VALUES (?, ?, 'submitted', 'pending')
-    `);
-    for (const companyId of candidateIds) insert.run(roundId, companyId);
-  })();
-  return res.status(201).json({ roundId, programId, asOfDate, asOfFy, candidateCount: candidateIds.length });
+  const asOfFy = fiscalYearAvailableAt(parsedDate.date);
+  try {
+    getDb().transaction(() => {
+      getDb().prepare(`
+        INSERT INTO round_master (round_id, program_id, as_of_date, as_of_fy, status)
+        VALUES (?, ?, ?, ?, 'active')
+      `).run(roundId, programId, parsedDate.text, asOfFy);
+      const insert = getDb().prepare(`
+        INSERT INTO round_candidate (round_id, company_id, application_status, reviewer_status)
+        VALUES (?, ?, 'submitted', 'pending')
+      `);
+      for (const companyId of candidateIds) insert.run(roundId, companyId);
+    })();
+    return res.status(201).json({
+      roundId,
+      programId,
+      asOfDate: parsedDate.text,
+      asOfFy,
+      candidateCount: candidateIds.length,
+    });
+  } catch {
+    return sendApiError(res, 500, 'ROUND_CREATE_FAILED', 'Unable to create the review round');
+  }
 });
 
 router.post('/:id/selection-scenarios', (req: Request, res: Response) => {
   const roundId = String(req.params.id);
   if (!getDb().prepare('SELECT 1 FROM round_master WHERE round_id = ?').get(roundId)) {
-    return res.status(404).json({ error: 'Round not found' });
+    return sendApiError(res, 404, 'ROUND_NOT_FOUND', 'Round not found');
   }
-  const targetCount = Math.max(1, Math.min(50, Number.parseInt(String(req.body?.targetCount ?? 5), 10) || 5));
-  const selectedIds = Array.isArray(req.body?.selectedCompanyIds)
-    ? [...new Set<number>(req.body.selectedCompanyIds
-        .map((value: unknown) => Number.parseInt(String(value), 10))
-        .filter((value: number) => Number.isFinite(value)))]
-    : [];
+  const targetCount = parsePositiveInteger(req.body?.targetCount ?? 5);
+  if (!targetCount || targetCount > 50) {
+    return sendApiError(res, 400, 'INVALID_TARGET_COUNT', 'targetCount must be an integer between 1 and 50');
+  }
+  const selectedIds = parseUniquePositiveIntegerIds(req.body?.selectedCompanyIds);
+  if (!selectedIds) {
+    return sendApiError(
+      res,
+      400,
+      'INVALID_SELECTED_COMPANY_IDS',
+      'selectedCompanyIds must contain unique positive integer IDs',
+    );
+  }
   if (selectedIds.length !== targetCount) {
-    return res.status(400).json({ error: `selectedCompanyIds must contain exactly ${targetCount} unique IDs` });
+    return sendApiError(
+      res,
+      400,
+      'SELECTION_COUNT_MISMATCH',
+      `selectedCompanyIds must contain exactly ${targetCount} unique IDs`,
+    );
   }
   const candidateIds = new Set((getDb().prepare(
     'SELECT company_id FROM round_candidate WHERE round_id = ?'
   ).all(roundId) as Array<{ company_id: number }>).map(row => row.company_id));
   if (selectedIds.some(companyId => !candidateIds.has(companyId))) {
-    return res.status(400).json({ error: 'selectedCompanyIds contains a non-candidate company' });
+    return sendApiError(
+      res,
+      400,
+      'NON_CANDIDATE_SELECTED',
+      'selectedCompanyIds contains a non-candidate company',
+    );
   }
   const reports = selectedIds
     .map(companyId => buildReport(companyId, roundId))
@@ -105,7 +151,7 @@ router.post('/:id/selection-scenarios', (req: Request, res: Response) => {
 router.get('/:id/candidates', (req: Request, res: Response) => {
   const roundId = String(req.params.id);
   const round = getDb().prepare('SELECT * FROM round_master WHERE round_id = ?').get(roundId);
-  if (!round) return res.status(404).json({ error: 'Round not found' });
+  if (!round) return sendApiError(res, 404, 'ROUND_NOT_FOUND', 'Round not found');
   const [requestedSort = 'company_id', requestedDirection = 'asc'] = String(req.query.sort || '').split(':');
   const sortKey = SORT_GETTERS[requestedSort] ? requestedSort : 'company_id';
   const direction = requestedDirection === 'desc' ? -1 : 1;
@@ -148,13 +194,16 @@ router.get('/:id/candidates', (req: Request, res: Response) => {
 router.put('/:id/candidates/:companyId', (req: Request, res: Response) => {
   const allowed = new Set(['pending', 'reviewing', 'shortlisted', 'selected', 'rejected']);
   const reviewerStatus = String(req.body?.reviewerStatus || '');
-  if (!allowed.has(reviewerStatus)) return res.status(400).json({ error: 'invalid reviewerStatus' });
+  if (!allowed.has(reviewerStatus)) {
+    return sendApiError(res, 400, 'INVALID_REVIEWER_STATUS', 'invalid reviewerStatus');
+  }
   const roundId = String(req.params.id);
-  const companyId = Number.parseInt(String(req.params.companyId), 10);
+  const companyId = parsePositiveInteger(req.params.companyId);
+  if (!companyId) return sendApiError(res, 400, 'INVALID_COMPANY_ID', 'companyId must be a positive integer');
   const result = getDb().prepare(`
     UPDATE round_candidate SET reviewer_status = ? WHERE round_id = ? AND company_id = ?
   `).run(reviewerStatus, roundId, companyId);
-  if (result.changes === 0) return res.status(404).json({ error: 'Candidate not found' });
+  if (result.changes === 0) return sendApiError(res, 404, 'CANDIDATE_NOT_FOUND', 'Candidate not found');
   return res.json({ roundId, companyId, reviewerStatus });
 });
 

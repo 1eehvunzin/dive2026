@@ -1,9 +1,12 @@
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
 import { CheckSquare, Building2, MapPin, Users, X, ArrowUpRight, Coins } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { FinancialRiskBadge } from "@/components/financial-risk-badge"
-import { companies, type Company, type ProgramRecord } from "@/lib/mock-data"
+import { getCompanySummary, mapCompanyListItem } from "@/lib/api"
+import { type Company, type ProgramRecord } from "@/lib/mock-data"
+import { formatKrwMillion } from "@/lib/format"
 
 export function ShortlistView({
   records,
@@ -16,13 +19,46 @@ export function ShortlistView({
   onToggleShortlist: (companyId: string, programId: string) => void
   onBrowse: (programId: string) => void
 }) {
+  const [companies, setCompanies] = useState<Company[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const ids = useMemo(
+    () => [...new Set(records.flatMap((record) => record.shortlist))],
+    [records],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    if (ids.length === 0) {
+      return
+    }
+    const load = async () => {
+      await Promise.resolve()
+      if (cancelled) return
+      setLoading(true)
+      setError(null)
+      try {
+        const items = await Promise.all(ids.map((id) => getCompanySummary(id)))
+        if (!cancelled) setCompanies(items.map(mapCompanyListItem))
+      } catch (reason) {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "즐겨찾기 기업을 불러오지 못했습니다.")
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [ids])
+
   const groups = records.map((r) => ({
     record: r,
     picked: companies
       .filter((c) => r.shortlist.includes(c.id))
       .sort((a, b) => (b.financials.at(-1)?.revenue ?? -Infinity) - (a.financials.at(-1)?.revenue ?? -Infinity)),
   }))
-  const totalPicked = groups.reduce((s, g) => s + g.picked.length, 0)
+  const requestedCount = ids.length
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
@@ -30,11 +66,11 @@ export function ShortlistView({
         <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">즐겨찾기</span>
         <h1 className="mt-2 text-xl font-semibold text-foreground">지원사업별 즐겨찾기한 기업</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          등록된 공고 {records.length}건 · 즐겨찾기한 기업 총 {totalPicked}개
+          등록된 공고 {records.length}건 · 즐겨찾기한 기업 총 {requestedCount}개
         </p>
       </div>
 
-      {totalPicked === 0 ? (
+      {requestedCount === 0 ? (
         <div className="mt-10 flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card py-16 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary text-muted-foreground">
             <CheckSquare className="h-6 w-6" />
@@ -49,6 +85,8 @@ export function ShortlistView({
         </div>
       ) : (
         <div className="mt-8 flex flex-col gap-10">
+          {loading && <p className="text-sm text-muted-foreground">실제 기업 데이터를 불러오는 중입니다.</p>}
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           {groups.map(({ record, picked }) => (
             <section key={record.program.id}>
               <div className="flex flex-wrap items-start justify-between gap-4">
@@ -57,7 +95,7 @@ export function ShortlistView({
                     {record.program.title}
                   </span>
                   <p className="mt-1.5 text-sm text-muted-foreground">
-                    즐겨찾기 {picked.length}개 · 누적 고용 {picked.reduce((s, c) => s + c.employees, 0)}명
+                    즐겨찾기 {picked.length}개 · 확인 고용 {picked.reduce((s, c) => s + (c.employees ?? 0), 0)}명
                   </p>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => onBrowse(record.program.id)}>
@@ -97,7 +135,7 @@ export function ShortlistView({
                             </span>
                             <span className="inline-flex items-center gap-1">
                               <Users className="h-3.5 w-3.5" />
-                              {c.employees}명
+                              {c.employees === null ? "고용값 미연계" : `${c.employees.toLocaleString("ko-KR")}명`}
                             </span>
                             <span className="inline-flex items-center gap-1">
                               <Coins className="h-3.5 w-3.5" />
@@ -111,8 +149,8 @@ export function ShortlistView({
                           <p className="text-xs text-muted-foreground">최근 매출</p>
                           <p className="text-sm font-semibold tabular-nums text-foreground">
                             {c.financials.at(-1)?.revenue == null
-                              ? "자료 없음"
-                              : `${c.financials.at(-1)?.revenue}${c.financialUnit}`}
+                              ? "매출값 미연계"
+                              : formatKrwMillion(c.financials.at(-1)?.revenue ?? null)}
                           </p>
                         </div>
                         <button

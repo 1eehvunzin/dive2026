@@ -1,4 +1,6 @@
 import { Router, Request, Response } from 'express';
+import { getDb } from '../db/connection';
+import { parseUniquePositiveIntegerIds, sendApiError } from '../lib/http';
 import { buildReport, RoundNotFoundError } from '../lib/report-engine';
 
 const router = Router();
@@ -9,17 +11,39 @@ const ALLOWED_METRICS = new Set([
 ]);
 
 router.post('/', (req: Request, res: Response) => {
-  const companyIds: number[] = Array.isArray(req.body?.companyIds)
-    ? [...new Set<number>(req.body.companyIds
-        .map((value: unknown) => Number.parseInt(String(value), 10))
-        .filter((value: number) => Number.isFinite(value)))]
-    : [];
+  const companyIds = parseUniquePositiveIntegerIds(req.body?.companyIds);
   const roundId = typeof req.body?.roundId === 'string' ? req.body.roundId : null;
-  const metrics = Array.isArray(req.body?.metrics)
-    ? req.body.metrics.map(String).filter((metric: string) => ALLOWED_METRICS.has(metric))
+  if (!companyIds || companyIds.length < 2 || companyIds.length > 50) {
+    return sendApiError(
+      res,
+      400,
+      'INVALID_COMPANY_IDS',
+      'companyIds must contain 2-50 unique positive integer IDs',
+    );
+  }
+  const requestedMetrics = req.body?.metrics;
+  if (requestedMetrics !== undefined && !Array.isArray(requestedMetrics)) {
+    return sendApiError(res, 400, 'INVALID_METRICS', 'metrics must be an array');
+  }
+  const metrics = Array.isArray(requestedMetrics)
+    ? [...new Set(requestedMetrics.map(String))]
     : [...ALLOWED_METRICS];
-  if (companyIds.length < 2 || companyIds.length > 50) {
-    return res.status(400).json({ error: 'companyIds must contain 2-50 unique IDs' });
+  const invalidMetrics = metrics.filter(metric => !ALLOWED_METRICS.has(metric));
+  if (invalidMetrics.length > 0 || metrics.length === 0) {
+    return sendApiError(res, 400, 'INVALID_METRICS', 'metrics contains unsupported values', {
+      metrics: invalidMetrics,
+      allowed: [...ALLOWED_METRICS],
+    });
+  }
+  const existingIds = new Set((getDb().prepare(`
+    SELECT company_id FROM company_master
+    WHERE company_id IN (${companyIds.map(() => '?').join(',')})
+  `).all(...companyIds) as Array<{ company_id: number }>).map(row => row.company_id));
+  const missingCompanyIds = companyIds.filter(companyId => !existingIds.has(companyId));
+  if (missingCompanyIds.length > 0) {
+    return sendApiError(res, 404, 'COMPANY_NOT_FOUND', 'One or more companies were not found', {
+      companyIds: missingCompanyIds,
+    });
   }
 
   let rows;
@@ -48,8 +72,10 @@ router.post('/', (req: Request, res: Response) => {
       };
     });
   } catch (err) {
-    if (err instanceof RoundNotFoundError) return res.status(404).json({ error: err.message });
-    throw err;
+    if (err instanceof RoundNotFoundError) {
+      return sendApiError(res, 404, 'ROUND_NOT_FOUND', 'Round not found');
+    }
+    return sendApiError(res, 500, 'COMPARISON_FAILED', 'Unable to compare companies');
   }
   return res.json({ round_id: roundId, metrics, rows });
 });

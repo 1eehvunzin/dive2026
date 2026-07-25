@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Building2,
   Calendar,
@@ -19,22 +19,27 @@ import {
   ArrowUpDown,
   Check,
   X,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { FinancialRiskBadge } from "@/components/financial-risk-badge"
-import { companies, type Company, type Program } from "@/lib/mock-data"
+import { type Company, type Program } from "@/lib/mock-data"
 import { assessFinancialRisk, riskTierOrder } from "@/lib/risk"
 import { cn } from "@/lib/utils"
 
 const revenueGrowth = (c: Company) => {
+  if (c.revenueGrowthPct !== undefined) return c.revenueGrowthPct
   const values = c.financials.map((point) => point.revenue).filter((value): value is number => value !== null)
   if (values.length < 2 || values[0] === 0) return null
   return Math.round(((values.at(-1)! - values[0]) / Math.abs(values[0])) * 100)
 }
 
-type SortKey = "revenue" | "growth" | "employees" | "financial-risk"
+type SortKey = "program-fit" | "revenue" | "growth" | "employees" | "financial-risk"
 
 const sortOptions: { key: SortKey; label: string }[] = [
+  { key: "program-fit", label: "공고 요건·데이터 적합순" },
   { key: "revenue", label: "최근 매출 규모순" },
   { key: "financial-risk", label: "재무 위험 낮은순" },
   { key: "growth", label: "매출 성장순" },
@@ -158,17 +163,32 @@ function CompanyRow({
             </span>
             <span className="inline-flex items-center gap-1">
               <Users className="h-3.5 w-3.5" />
-              {company.employees}명
+              {company.employees === null
+                ? "고용값 미연계"
+                : `${company.employees.toLocaleString("ko-KR")}명`}
             </span>
           </div>
         </div>
       </button>
 
       <div className="flex items-center gap-6 border-t border-border pt-3 sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
+        {company.programFitScore !== null && company.programFitScore !== undefined && (
+          <div className="max-w-44 text-right">
+            <p className="text-xs text-muted-foreground">공고 데이터 적합도</p>
+            <p className="text-sm font-semibold text-primary">{company.programFitScore}점</p>
+            <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
+              {company.programFitReasons?.join(" · ")}
+            </p>
+          </div>
+        )}
         <div className="text-right">
           <p className="text-xs text-muted-foreground">매출 성장</p>
           <p className={cn("text-sm font-semibold", growth === null ? "text-muted-foreground" : growth >= 0 ? "text-success" : "text-destructive")}>
-            {growth === null ? "자료 부족" : `${growth > 0 ? "+" : ""}${growth}%`}
+            {growth === null
+              ? "전년 비교 불가"
+              : `${growth > 0 ? "+" : ""}${growth.toLocaleString("ko-KR", {
+                  maximumFractionDigits: 1,
+                })}%`}
           </p>
         </div>
         <div className="text-right">
@@ -196,48 +216,79 @@ function CompanyRow({
 }
 
 export function CompanyView({
+  companies,
+  total,
+  loading,
+  error,
+  page,
+  pageSize,
   program,
   onSelectCompany,
   onEditProgram,
   onRegisterProgram,
   shortlist,
   onToggleShortlist,
+  onQueryChange,
+  onSortChange,
+  onPageChange,
 }: {
+  companies: Company[]
+  total: number
+  loading: boolean
+  error: string | null
+  page: number
+  pageSize: number
   program?: Program | null
   onSelectCompany: (c: Company) => void
   onEditProgram: () => void
   onRegisterProgram: () => void
   shortlist: string[]
   onToggleShortlist: (id: string) => void
+  onQueryChange: (query: string) => void
+  onSortChange: (sort: SortKey) => void
+  onPageChange: (page: number) => void
 }) {
   const canSelect = !!program
   const [query, setQuery] = useState("")
-  const [sortKey, setSortKey] = useState<SortKey>("revenue")
+  const [sortKey, setSortKey] = useState<SortKey>(program ? "program-fit" : "revenue")
   const [industries, setIndustries] = useState<string[]>([])
   const [locations, setLocations] = useState<string[]>([])
 
-  const allIndustries = useMemo(() => [...new Set(companies.map((c) => c.industry))], [])
-  const allLocations = useMemo(() => [...new Set(companies.map((c) => c.location))], [])
+  useEffect(() => {
+    if (program) setSortKey("program-fit")
+  }, [program?.id])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => onQueryChange(query.trim()), 250)
+    return () => window.clearTimeout(timer)
+  }, [query, onQueryChange])
+
+  const allIndustries = useMemo(() => [...new Set(companies.map((c) => c.industry))], [companies])
+  const allLocations = useMemo(() => [...new Set(companies.map((c) => c.location))], [companies])
   const filterCount = industries.length + locations.length
 
   const visible = useMemo(() => {
-    const q = query.trim().toLowerCase()
     const filtered = companies.filter((c) => {
       if (industries.length && !industries.includes(c.industry)) return false
       if (locations.length && !locations.includes(c.location)) return false
-      if (q && !`${c.name} ${c.industry} ${c.oneLiner}`.toLowerCase().includes(q)) return false
       return true
     })
     const sorted = [...filtered]
-    if (sortKey === "revenue")
+    if (sortKey === "program-fit")
+      sorted.sort((a, b) => (b.programFitScore ?? -Infinity) - (a.programFitScore ?? -Infinity))
+    else if (sortKey === "revenue")
       sorted.sort((a, b) => (b.financials.at(-1)?.revenue ?? -Infinity) - (a.financials.at(-1)?.revenue ?? -Infinity))
     else if (sortKey === "growth")
       sorted.sort((a, b) => (revenueGrowth(b) ?? -Infinity) - (revenueGrowth(a) ?? -Infinity))
-    else if (sortKey === "employees") sorted.sort((a, b) => b.employees - a.employees)
+    else if (sortKey === "employees") sorted.sort((a, b) => (b.employees ?? -Infinity) - (a.employees ?? -Infinity))
     else if (sortKey === "financial-risk")
       sorted.sort((a, b) => riskTierOrder[assessFinancialRisk(a).tier] - riskTierOrder[assessFinancialRisk(b).tier])
     return sorted
-  }, [query, sortKey, industries, locations])
+  }, [companies, sortKey, industries, locations])
+
+  useEffect(() => {
+    onSortChange(sortKey)
+  }, [sortKey, onSortChange])
 
   const resetFilters = () => {
     setIndustries([])
@@ -258,7 +309,7 @@ export function CompanyView({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="기업명·업종·주요 제품으로 검색해보세요"
+            placeholder="기업일련번호·업종·주요 제품으로 검색해보세요"
             className="w-full bg-transparent text-foreground outline-none placeholder:text-muted-foreground"
           />
         </div>
@@ -278,11 +329,23 @@ export function CompanyView({
       </div>
 
       <p className="mt-3 text-sm text-muted-foreground">
-        총 <span className="font-medium text-foreground">{visible.length}</span>개 기업
+        총 <span className="font-medium text-foreground">{total.toLocaleString()}</span>개 기업
+        {filterCount > 0 && <span> · 현재 페이지 필터 결과 {visible.length}개</span>}
       </p>
 
       <div className="mt-3 flex flex-col gap-3">
-        {visible.map((company) => (
+        {error && (
+          <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+        {loading && (
+          <div className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-card/50 py-14 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            실제 기업 데이터를 불러오는 중입니다
+          </div>
+        )}
+        {!loading && visible.map((company) => (
           <CompanyRow
             key={company.id}
             company={company}
@@ -292,12 +355,33 @@ export function CompanyView({
             canSelect={canSelect}
           />
         ))}
-        {visible.length === 0 && (
+        {!loading && visible.length === 0 && (
           <div className="rounded-xl border border-dashed border-border bg-card/50 py-14 text-center text-sm text-muted-foreground">
             조건에 맞는 기업이 없습니다. 검색어나 필터를 조정해 보세요.
           </div>
         )}
       </div>
+
+      {!loading && total > pageSize && (
+        <div className="mt-5 flex items-center justify-center gap-3">
+          <Button variant="outline" size="sm" disabled={page === 0} onClick={() => onPageChange(page - 1)}>
+            <ChevronLeft className="mr-1 h-4 w-4" />
+            이전
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            {page + 1} / {Math.max(1, Math.ceil(total / pageSize))}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={(page + 1) * pageSize >= total}
+            onClick={() => onPageChange(page + 1)}
+          >
+            다음
+            <ChevronRight className="ml-1 h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

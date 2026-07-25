@@ -15,6 +15,8 @@ import type {
 } from './types';
 import { getDb } from '../db/connection';
 import {
+  buildOfficerBrief,
+  buildObservedChangesAfterSupport,
   buildReferenceIndicators,
   buildSixBoxChecks,
   buildSupportSummary,
@@ -116,9 +118,21 @@ function buildWarnings(
 ): string[] {
   const warnings: string[] = [];
   if (financialFy === null) warnings.push('기준시점 이전 재무 데이터 없음');
-  else if (financialFy < cutoffFy) warnings.push(`기준연도 ${cutoffFy} 재무 없음 — ${financialFy}년 값을 사용`);
+  else if (financialFy < cutoffFy) warnings.push(`재무지표 기준: 결산 확정된 ${financialFy}년`);
   if (!master.founded_date) warnings.push('설립일자 미확인 — 업력 계산 불가');
+  if (
+    master.main_product
+    && ['-', '없음', '미상', '홈페이지'].includes(master.main_product.trim())
+  ) {
+    // 제품·서비스로 해석하기 어려운 원천값은 화면 필드 자체를 만들지 않는다.
+  }
   if (master.closed_flag === 1) warnings.push(`${master.biz_status || '비정상'} 상태 — 지원 대상 적정성 확인 필요`);
+  const latest = [...yearlies].sort((left, right) => right.fiscal_year - left.fiscal_year)[0];
+  if (latest?.liabilities !== null && latest?.liabilities !== undefined && latest.liabilities < 0) {
+    warnings.push(
+      `${latest.fiscal_year}년 부채총계가 음수로 적재되어 부채비율을 재무 안정 신호로 사용하기 전 원천 부호를 확인해야 함`,
+    );
+  }
   if (historicalContext) {
     warnings.push(`회차 기준시점 이후 재무·지원 이력은 제외됨`);
     warnings.push('인증·연구소 보유 여부는 관측일 기준 최신값이므로 과거 회차 해석 시 확인 필요');
@@ -294,23 +308,40 @@ function buildNtisSummary(companyId: number, asOfFy: number): NtisSummary {
   };
 }
 
+const EVIDENCE_FIELD: Record<string, { sheet: string; field: string; formula: string | null }> = {
+  revenue_level: { sheet: '1. 기업정보', field: '매출액', formula: '천원 → 백만원 환산' },
+  tenure_years: { sheet: '1. 기업정보', field: '설립일자', formula: '기준연도 − 설립연도' },
+  employment_level: { sheet: '1. 기업정보', field: '국민연금 가입자수', formula: null },
+  revenue_growth: { sheet: '1. 기업정보', field: '매출액', formula: '(당해 − 전년) / 전년 × 100' },
+  debt_ratio: { sheet: '1. 기업정보', field: '부채총계 / 자본총계', formula: '부채총계 ÷ 자본총계 × 100' },
+  operating_margin: { sheet: '1. 기업정보', field: '영업이익 / 매출액', formula: '영업이익 ÷ 매출액 × 100' },
+  rd_intensity: { sheet: '1. 기업정보', field: '연구개발비 / 매출액', formula: '연구개발비 ÷ 매출액 × 100' },
+};
+
 function makeEvidence(
   companyId: number,
   financialFy: number | null,
   indicators: CompanyReportResponse['survival_indicators'],
 ): Evidence[] {
-  return indicators.map(item => ({
-    evidence_id: item.evidence_ids[0],
-    source_file: 'KODATA 기업데이터',
-    source_sheet_page: '1. 기업정보',
-    source_row_cell: `company_id=${companyId}`,
-    reference_year: financialFy,
-    raw_value: item.value,
-    normalized_value: item.value,
-    formula: item.formula_version === 'raw-v1' ? null : item.code,
-    formula_version: item.formula_version,
-    external_dataset_id: item.external_benchmark?.dataset_id ?? null,
-  }));
+  return indicators.map(item => {
+    const meta = EVIDENCE_FIELD[item.code];
+    return {
+      evidence_id: item.evidence_ids[0],
+      source_file: 'KODATA 기업데이터',
+      source_sheet_page: meta?.sheet ?? '1. 기업정보',
+      source_row_cell: meta
+        ? `${meta.field} · company_id=${companyId}`
+        : `company_id=${companyId}`,
+      reference_year: item.as_of_year ?? financialFy,
+      raw_value: item.value,
+      normalized_value: item.value === null
+        ? null
+        : `${item.value}${item.unit ? ` ${item.unit}` : ''}`,
+      formula: meta?.formula ?? (item.formula_version === 'raw-v1' ? null : item.code),
+      formula_version: item.formula_version,
+      external_dataset_id: item.external_benchmark?.dataset_id ?? null,
+    };
+  });
 }
 
 function evaluateRule(
@@ -318,24 +349,40 @@ function evaluateRule(
   master: CompanyMaster,
   tenure: number | null,
 ): { matched: boolean | null; reason: string } {
-  if (!requirement.rule_json) return { matched: null, reason: '구조화된 규칙 없음' };
+  if (!requirement.rule_json) return { matched: null, reason: '공고 원문 확인 항목' };
   let rule: { field?: string; operator?: string; value?: unknown };
   try {
     rule = JSON.parse(requirement.rule_json) as typeof rule;
   } catch {
     return { matched: null, reason: '규칙 JSON 오류' };
   }
+  const fieldAliases: Record<string, string> = {
+    창업기간: 'tenure_years',
+    업력: 'tenure_years',
+    소재지: 'region',
+    지역: 'region',
+    location: 'region',
+    기업규모: 'size',
+    업종코드: 'ksic11',
+  };
+  const normalizedField = rule.field ? (fieldAliases[rule.field] || rule.field) : undefined;
   const values: Record<string, unknown> = {
     region: master.region,
+    location: master.region,
     size: master.size,
     ksic11: master.ksic11,
     corp_type: master.corp_type,
     biz_status: master.biz_status,
     tenure_years: tenure,
   };
-  const actual = rule.field ? values[rule.field] : undefined;
-  if (actual === undefined || actual === null) return { matched: null, reason: `${rule.field || '필드'} 데이터 없음` };
+  const actual = normalizedField ? values[normalizedField] : undefined;
+  if (actual === undefined || actual === null) return { matched: null, reason: '신청서·증빙 확인 항목' };
   const expected = rule.value;
+  const numericExpected = typeof expected === 'number'
+    ? expected
+    : typeof expected === 'string' && expected.match(/-?\d+(?:\.\d+)?/)
+      ? Number(expected.match(/-?\d+(?:\.\d+)?/)![0])
+      : null;
   let matched: boolean | null = null;
   if (rule.operator === 'eq') matched = actual === expected;
   else if (rule.operator === 'in') {
@@ -344,18 +391,27 @@ function evaluateRule(
       : typeof expected === 'string'
         ? expected.split(/[,|]/).map(value => value.trim()).filter(Boolean)
         : [];
-    matched = expectedValues.includes(actual);
+    const normalizeRegion = (value: unknown) => String(value)
+      .replace(/광역시|특별시|특별자치시|특별자치도|도$/g, '')
+      .trim();
+    matched = expectedValues.some(value =>
+      value === actual || normalizeRegion(value) === normalizeRegion(actual));
   }
   else if (rule.operator === 'starts_with' && typeof actual === 'string' && typeof expected === 'string') {
     matched = actual.startsWith(expected);
-  } else if (rule.operator === 'gte' && typeof actual === 'number' && typeof expected === 'number') {
-    matched = actual >= expected;
-  } else if (rule.operator === 'lte' && typeof actual === 'number' && typeof expected === 'number') {
-    matched = actual <= expected;
+  } else if (rule.operator === 'gte' && typeof actual === 'number' && numericExpected !== null) {
+    matched = actual >= numericExpected;
+  } else if (rule.operator === 'lte' && typeof actual === 'number' && numericExpected !== null) {
+    matched = actual <= numericExpected;
   }
   return matched === null
     ? { matched: null, reason: `지원하지 않는 연산자 ${rule.operator || '없음'}` }
-    : { matched, reason: `${rule.field}=${String(actual)}, 기준=${String(expected)}` };
+    : {
+        matched,
+        reason: matched
+          ? `기업 데이터 ${String(actual)} · 공고 기준 충족`
+          : `기업 데이터 ${String(actual)} · 공고 기준 ${String(expected)} 재검토`,
+      };
 }
 
 function buildProgramContext(
@@ -474,32 +530,46 @@ export function buildReport(
     ORDER BY selected_date
   `).all(companyId, supportCutoffDate, cutoffFy) as SupportEpisode[];
 
-  const supportSummary = buildSupportSummary(episodes);
+  const effectiveFy = financialFy ?? cutoffFy;
+  const supportSummary = buildSupportSummary(episodes, effectiveFy);
+  const observedChanges = buildObservedChangesAfterSupport(yearlies, supportSummary);
+  const tenure = tenureYears(master.founded_date, effectiveFy);
+  const programContext = buildProgramContext(round, master, tenure);
+  const programGate = programContext ? programContext.gate_status : 'no_program' as const;
+
   const summaryChecks = buildSixBoxChecks(
     master,
     latestYearly,
     percentileMap,
     metricMap,
     supportSummary,
-    financialFy ?? cutoffFy,
+    effectiveFy,
+    programGate,
+    observedChanges,
+  );
+  const officerBrief = buildOfficerBrief(
+    summaryChecks,
+    supportSummary,
+    latestYearly,
+    effectiveFy,
   );
   const survivalIndicators = buildSurvivalIndicators(
     master,
     yearlies,
     percentileMap,
     metrics,
-    financialFy ?? cutoffFy,
+    effectiveFy,
   );
   const referenceIndicators = buildReferenceIndicators(
     companyId,
     latestYearly,
     percentileMap,
     metrics,
-    financialFy ?? cutoffFy,
+    effectiveFy,
   );
 
   for (const item of [...survivalIndicators, ...referenceIndicators]) {
-    const benchmark = findExternalBenchmark(master, item.code, item.value, financialFy ?? cutoffFy);
+    const benchmark = findExternalBenchmark(master, item.code, item.value, effectiveFy);
     item.external_benchmark = benchmark;
   }
   const externalBenchmarks = [...survivalIndicators, ...referenceIndicators]
@@ -513,8 +583,30 @@ export function buildReport(
     && financialFy < Math.max(...allYearlies.map(row => row.fiscal_year))
   );
   const rdMetric = metricMap.get('rd_intensity');
-  const tenure = tenureYears(master.founded_date, financialFy ?? cutoffFy);
   const dataWarnings = buildWarnings(master, allYearlies, cutoffFy, financialFy, historicalContext);
+  const ntisUnknownYearCount = (db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM ntis_project
+    WHERE company_id = ? AND base_year IS NULL
+  `).get(companyId) as { count: number }).count;
+  if (ntisUnknownYearCount > 0) {
+    dataWarnings.push(
+      `NTIS 기준연도 미상 ${ntisUnknownYearCount}건은 기준시점 과제·연구비 집계에서 제외함`,
+    );
+  }
+  if (latestYearly?.equity !== null && latestYearly?.equity !== undefined) {
+    const equityMillion = latestYearly.equity / 1000;
+    if (latestYearly.equity > 0 && equityMillion < 50) {
+      dataWarnings.push(
+        `${financialFy}년 자본총계 ${equityMillion.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}백만원으로 부채비율 절대값이 비정상적으로 커질 수 있음 — 자본 소진 여부를 먼저 확인`,
+      );
+    }
+  }
+  if (supportSummary.rejected_or_withdrawn > 0) {
+    dataWarnings.push(
+      `지원 원장에 탈락·포기 ${supportSummary.rejected_or_withdrawn}건 포함 — 중복수혜·누적 지원금은 지원대상 기준으로 해석`,
+    );
+  }
   const missingCriticalFields = [
     latestYearly?.revenue === null || latestYearly?.revenue === undefined ? 'revenue' : null,
     latestYearly?.equity === null || latestYearly?.equity === undefined ? 'equity' : null,
@@ -539,6 +631,7 @@ export function buildReport(
       certifications: certifications(master),
     },
     summary_checks: summaryChecks,
+    officer_brief: officerBrief,
     survival_indicators: survivalIndicators,
     reference_indicators: referenceIndicators,
     financial_series: toFinancialSeries(yearlies),
@@ -565,18 +658,24 @@ export function buildReport(
       rd_intensity_pct: rdMetric?.value ?? null,
     },
     support_summary: supportSummary,
-    similar_companies: findSimilarCompanies(master, latestYearly, financialFy ?? cutoffFy),
+    observed_changes_after_support: observedChanges,
+    similar_companies: findSimilarCompanies(master, latestYearly, effectiveFy),
     external_benchmarks: externalBenchmarks,
-    regional_context: buildRegionalContext(master, episodes, financialFy ?? cutoffFy),
-    ntis_summary: buildNtisSummary(companyId, financialFy ?? cutoffFy),
+    regional_context: buildRegionalContext(master, episodes, effectiveFy),
+    ntis_summary: buildNtisSummary(companyId, effectiveFy),
     evidence: makeEvidence(companyId, financialFy, [...survivalIndicators, ...referenceIndicators]),
-    program_context: buildProgramContext(round, master, tenure),
+    program_context: programContext,
     data_quality: {
       status: missingCriticalFields.length === 0 ? 'high' : missingCriticalFields.length <= 1 ? 'medium' : 'low',
       latest_financial_year: financialFy,
       missing_critical_fields: missingCriticalFields,
     },
     data_warnings: dataWarnings,
-    follow_up_questions: generateFollowUpQuestions(master, summaryChecks, supportSummary),
+    follow_up_questions: generateFollowUpQuestions(
+      master,
+      summaryChecks,
+      supportSummary,
+      observedChanges,
+    ),
   };
 }

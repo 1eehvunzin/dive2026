@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   UploadCloud,
   FileText,
@@ -15,6 +15,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { parseProgramDocument } from "@/lib/api";
 import { programs, type Program } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +32,7 @@ export function ProgramRegister({
   onComplete,
   initial = null,
 }: {
-  onComplete: (p: Program) => void;
+  onComplete: (p: Program) => void | Promise<void>;
   initial?: Program | null;
 }) {
   const [stage, setStage] = useState<Stage>(initial ? "review" : "upload");
@@ -39,34 +40,49 @@ export function ProgramRegister({
   const [dragOver, setDragOver] = useState(false);
   const [stepIdx, setStepIdx] = useState(0);
   const [draft, setDraft] = useState<Program>(initial ?? programs[0]);
+  const [error, setError] = useState<string | null>(null);
+  const [parseFallback, setParseFallback] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const runAnalysis = useCallback((name: string) => {
-    setFileName(name);
+  const runAnalysis = async (file: File) => {
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      setError("PDF 형식의 공고문만 업로드할 수 있습니다.");
+      setStage("upload");
+      return;
+    }
+    setFileName(file.name);
     setStage("analyzing");
     setStepIdx(0);
-    let i = 0;
-    const timer = setInterval(() => {
-      i += 1;
-      if (i >= analyzeSteps.length) {
-        clearInterval(timer);
-        // Simulated extraction result
-        setDraft({ ...programs[0] });
-        setStage("review");
-      } else {
-        setStepIdx(i);
-      }
-    }, 750);
-  }, []);
+    setElapsedSeconds(0);
+    setError(null);
+    setParseFallback(false);
+    const startedAt = Date.now();
+    const progressTimer = window.setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      setElapsedSeconds(elapsed);
+      setStepIdx(elapsed >= 35 ? 3 : elapsed >= 20 ? 2 : elapsed >= 8 ? 1 : 0);
+    }, 1000);
+    try {
+      const result = await parseProgramDocument(file);
+      setStepIdx(analyzeSteps.length);
+      setDraft({ id: initial?.id ?? "", ...result.program });
+      setParseFallback(result.fallback);
+      setStage("review");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "공고문 분석에 실패했습니다.");
+      setStage("upload");
+    } finally {
+      window.clearInterval(progressTimer);
+    }
+  };
 
-  const handleFiles = useCallback(
-    (files: FileList | null) => {
-      const file = files?.[0];
-      if (!file) return;
-      runAnalysis(file.name);
-    },
-    [runAnalysis],
-  );
+  const handleFiles = (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    void runAnalysis(file);
+  };
 
   const update = (patch: Partial<Program>) =>
     setDraft((d) => ({ ...d, ...patch }));
@@ -94,6 +110,11 @@ export function ProgramRegister({
 
       {stage === "upload" && (
         <div className="mt-8">
+          {error && (
+            <div role="alert" className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {error}
+            </div>
+          )}
           <div
             role="button"
             tabIndex={0}
@@ -125,12 +146,12 @@ export function ProgramRegister({
               공고문 PDF를 이곳에 드래그하거나 클릭해 업로드하세요
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              PDF만 지원합니다 · 최대 20MB
+              PDF 파일만 지원합니다 · 최대 50MB
             </p>
             <input
               ref={inputRef}
               type="file"
-              accept=".pdf,.hwp,.docx"
+              accept=".pdf,application/pdf"
               className="sr-only"
               onChange={(e) => handleFiles(e.target.files)}
             />
@@ -140,12 +161,10 @@ export function ProgramRegister({
               variant="ghost"
               size="sm"
               className="gap-1.5 text-muted-foreground"
-              onClick={() =>
-                runAnalysis("2026_AI융합_유망기업_성장바우처_공고.pdf")
-              }
+              onClick={() => inputRef.current?.click()}
             >
               <FileText className="h-3.5 w-3.5" />
-              샘플 공고문으로 체험하기
+              내 컴퓨터에서 공고문 선택하기
             </Button>
           </div>
         </div>
@@ -162,7 +181,7 @@ export function ProgramRegister({
                 {fileName}
               </p>
               <p className="text-xs text-muted-foreground">
-                AI가 공고문을 분석하고 있습니다
+                AI가 공고문을 분석하고 있습니다 · {elapsedSeconds}초 경과
               </p>
             </div>
           </div>
@@ -195,6 +214,9 @@ export function ProgramRegister({
               );
             })}
           </div>
+          <p className="mt-5 text-xs leading-relaxed text-muted-foreground">
+            문서 페이지 수와 표 복잡도에 따라 약 30~90초가 걸릴 수 있습니다. 완료 전에는 창을 닫지 마세요.
+          </p>
         </div>
       )}
 
@@ -203,8 +225,10 @@ export function ProgramRegister({
           <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">
             <CheckCircle2 className="h-4.5 w-4.5 shrink-0" />
             <span className="text-foreground">
-              <span className="font-medium">{fileName}</span> 에서 항목을
-              추출했습니다. 내용을 확인하고 필요하면 수정하세요.
+              <span className="font-medium">{fileName ?? "저장된 공고"}</span>
+              {parseFallback
+                ? "은 자동 추출을 사용할 수 없어 기본 정보만 채웠습니다. 원문을 보며 직접 확인하세요."
+                : "에서 항목을 추출했습니다. 내용을 확인하고 필요하면 수정하세요."}
             </span>
           </div>
 
@@ -286,6 +310,33 @@ export function ProgramRegister({
                   ))}
                 </div>
               </div>
+              {(draft.requirements?.length ?? 0) > 0 && (
+                <div>
+                  <div className="flex items-center justify-between gap-3">
+                    <label className="text-sm font-medium text-foreground">추출된 자격·배제·평가 요건</label>
+                    <span className="text-xs text-muted-foreground">{draft.requirements?.length}건</span>
+                  </div>
+                  <div className="mt-2 max-h-80 space-y-2 overflow-y-auto rounded-lg border border-border bg-secondary/20 p-3">
+                    {draft.requirements?.map((requirement) => (
+                      <div key={requirement.id} className="rounded-lg border border-border bg-background p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-medium text-foreground">{requirement.label}</p>
+                          <span className="text-xs text-muted-foreground">
+                            {requirement.sourcePage ? `${requirement.sourcePage}쪽` : "페이지 확인 필요"}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                          {requirement.sourceText ?? "원문 근거를 확인해야 합니다."}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {requirement.rule ? "데이터 자동판정 후보 · 저장 전 검토 필요" : "담당자 수동 확인"}
+                          {requirement.weight === null ? " · 명시 배점 없음" : ` · 배점 ${requirement.weight}`}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -297,16 +348,46 @@ export function ProgramRegister({
               onClick={() => {
                 setStage("upload");
                 setFileName(null);
+                setError(null);
               }}
             >
               <RotateCcw className="h-3.5 w-3.5" />
               다른 파일 올리기
             </Button>
-            <Button className="gap-1.5" onClick={() => onComplete(draft)}>
-              <Sparkles className="h-4 w-4" />
-              {initial ? "수정 내용 저장" : "등록하고 기업 추천 받기"}
+            <Button
+              className="gap-1.5"
+              disabled={saving || !draft.title.trim()}
+              onClick={async () => {
+                setSaving(true);
+                setError(null);
+                try {
+                  const reviewedDraft: Program = parseFallback
+                    ? { ...draft, reviewStatus: "draft" }
+                    : {
+                        ...draft,
+                        reviewStatus: "reviewed",
+                        requirements: draft.requirements?.map((requirement) => ({
+                          ...requirement,
+                          reviewStatus: "reviewed",
+                        })),
+                      };
+                  await onComplete(reviewedDraft);
+                } catch (cause) {
+                  setError(cause instanceof Error ? cause.message : "공고 저장에 실패했습니다.");
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {saving ? "저장 중..." : initial ? "수정 내용 저장" : "등록하고 기업 추천 받기"}
             </Button>
           </div>
+          {error && (
+            <div role="alert" className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {error}
+            </div>
+          )}
         </div>
       )}
     </div>

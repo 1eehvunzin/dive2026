@@ -154,33 +154,94 @@ export interface IndicatorRow {
   as_of_year: number | null;
   evidence_ids: string[];
   formula_version: string;
+  /** 폐업 예측 AUC. 없으면 규칙형 지표. */
+  auc?: number | null;
+  /** 생존점수 가중치. 0이면 참고지표. */
+  weight?: number | null;
   external_benchmark?: ExternalBenchmark | null;
 }
 
 export interface SixBoxCheck {
+  /** 스펙 키: survival | capacity | finance | support_focus | duplicate | data_quality | eligibility */
+  code: string;
   label: string;
   status: 'green' | 'yellow' | 'red' | 'gray';
   value: string;
   note: string | null;
+  /** 담당자 해석 한 줄 (관찰 사실, 추천 아님) */
+  interpretation: string | null;
 }
 
 export interface SupportSummaryItem {
   episode_id: string;
   program_name: string | null;
+  program_code: string | null;
   biz_type: string | null;
+  support_purpose: string | null;
   selected_date: string | null;
-  total_amount_million: number;
+  start_date: string | null;
+  end_date: string | null;
+  result: string | null;
+  total_amount_million: number | null;
   component_count: number;
+  is_awarded: boolean;
+  amount_flag: 'ok' | 'missing' | 'zero' | 'mixed';
+  components: Array<{
+    row_id: number;
+    support_type: string | null;
+    support_item: string | null;
+    amount_million: number | null;
+    amount_flag: string | null;
+  }>;
+}
+
+export interface SupportPurposeRepeat {
+  purpose: string;
+  episode_count: number;
+  years: number[];
+  total_amount_million: number;
+  program_names: string[];
 }
 
 export interface SupportSummary {
   total_episodes: number;
+  awarded_episodes: number;
+  rejected_or_withdrawn: number;
+  recent_3yr_awarded: number;
   total_amount_million: number;
+  awarded_amount_million: number;
   missing_amount_count: number;
+  zero_amount_count: number;
   years_received: number[];
   is_consecutive_3yr: boolean;
+  same_purpose_repeats: SupportPurposeRepeat[];
+  badges: string[];
   episode_list: SupportSummaryItem[];
-  overlap_pairs: Array<{ ep1_id: string; ep2_id: string; overlap_days: number }>;
+  overlap_pairs: Array<{
+    ep1_id: string;
+    ep2_id: string;
+    overlap_days: number;
+    purpose_relation: 'same' | 'similar' | 'different' | 'unknown';
+  }>;
+}
+
+export interface ObservedChangeAfterSupport {
+  episode_id: string;
+  program_name: string | null;
+  selected_date: string | null;
+  pre_fy: number | null;
+  post_fy: number | null;
+  revenue_change_pct: number | null;
+  employment_change: number | null;
+  new_patent_count: number | null;
+  status: 'improved' | 'partial' | 'unchanged' | 'insufficient' | 'overlapped';
+  note: string | null;
+}
+
+export interface OfficerBrief {
+  lines: string[];
+  priority_checks: string[];
+  signal_counts: { red: number; yellow: number; green: number; gray: number };
 }
 
 export interface SimilarCompany {
@@ -256,6 +317,7 @@ export interface CompanyReportResponse {
     certifications: string[];
   };
   summary_checks: SixBoxCheck[];
+  officer_brief: OfficerBrief;
   survival_indicators: IndicatorRow[];
   reference_indicators: IndicatorRow[];
   financial_series: FinancialPoint[];
@@ -282,6 +344,7 @@ export interface CompanyReportResponse {
     rd_intensity_pct: number | null;
   };
   support_summary: SupportSummary;
+  observed_changes_after_support: ObservedChangeAfterSupport[];
   similar_companies: SimilarCompany[];
   external_benchmarks: ExternalBenchmark[];
   regional_context: RegionalContext;
@@ -328,11 +391,13 @@ export interface CompanyListItem {
   debt_ratio_pct: number | null;
   support_total_million: number;
   support_episode_count: number;
+  support_missing_amount_count: number;
   valid_patent_count: number | null;
   certifications: string[];
   risk_signals: string[];
   data_quality: 'high' | 'medium' | 'low';
   program_fit_score: number | null;
+  program_fit_reasons: string[];
 }
 
 export interface CompanyListResponse {

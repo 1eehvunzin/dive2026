@@ -1,0 +1,58 @@
+{
+  "generated_at": "2026-07-25T20:00:00+09:00",
+  "policy": {
+    "business_registration_number_external_lookup": false,
+    "authenticated_api_used": false,
+    "public_no_auth_downloads_only": true,
+    "raw_files_immutable": true
+  },
+  "datasets": [
+    {
+      "id": "bok_business_analysis_2024_report",
+      "publisher": "한국은행",
+      "reference_year": 2024,
+      "format": "PDF",
+      "files": [
+        "raw/bok/2024_business_analysis_full_report.pdf"
+      ],
+      "validation": {
+        "status": "passed",
+        "pages": 868,
+        "encrypted": false,
+        "first_page_rendered": true
+      },
+      "source_page": "https://www.bok.or.kr/portal/bbs/P0000599/view.do?depth=200455&menuNo=200455&nttId=10094232",
+      "join_keys": ["ksic", "company_size", "fiscal_year"]
+    },
+    {
+      "id": "bok_business_analysis_2024_preliminary_statistics",
+      "publisher": "한국은행",
+      "reference_year": 2024,
+      "format": "XLSX",
+      "files": [
+        "raw/bok/2024_business_analysis_preliminary_statistics.xlsx"
+      ],
+      "validation": {
+        "status": "passed",
+        "ooxml_zip_test": true,
+        "sheets": ["통계편(지표)_최종"]
+      },
+      "source_page": "https://www.bok.or.kr/portal/bbs/B0000501/view.do?menuNo=201264&nttId=10091824&oldMenuNo=201263",
+      "join_keys": ["ksic", "company_size", "fiscal_year"]
+    },
+    {
+      "id": "sasang_business_census_2024",
+      "publisher": "부산광역시 사상구",
+      "reference_year": 2024,
+      "format": "XLSX",
+      "file_glob": "raw/busan/sasang_business_census_2024/*.xlsx",
+      "file_count": 9,
+      "validation": {
+        "status": "passed",
+        "ooxml_zip_test": true
+      },
+      "source_page": "https://www.sasang.go.kr/index.sasang?menuCd=DOM_000000120004013000",
+      "join_keys": ["ksic", "administrative_dong", "employee_band", "reference_year"]
+    }
+  ]
+}
