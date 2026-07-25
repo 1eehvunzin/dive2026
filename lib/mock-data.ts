@@ -9,6 +9,18 @@ export type Program = {
   targetStage: string
   keywords: string[]
   description: string
+  reviewStatus?: "draft" | "reviewed" | "active"
+  documentId?: string | null
+  requirements?: {
+    id: string
+    type: "eligibility" | "exclusion" | "preference" | "evaluation" | "document" | "obligation"
+    label: string
+    rule: Record<string, unknown> | null
+    weight: number | null
+    sourcePage: number | null
+    sourceText: string | null
+    reviewStatus: "draft" | "reviewed" | "active"
+  }[]
 }
 
 export type FinancialPoint = {
@@ -30,8 +42,8 @@ export type Company = {
   logoSeed: string
   industry: string
   location: string
-  founded: number
-  employees: number
+  founded: number | null
+  employees: number | null
   supportTotal: string
   financialUnit: "억원" | "백만원"
   oneLiner: string
@@ -40,13 +52,16 @@ export type Company = {
   strengths: string[]
   risks: string[]
   financials: FinancialPoint[]
-  patents: number
+  patents: number | null
   certifications: string[]
   creditGrade: string | null
   debtRatio: number | null
   currentRatio: number | null
+  revenueGrowthPct?: number | null
   /** null은 '흑자 지속'이 아니라 원천 필드 부재/산출 불가를 뜻한다. */
   runwayMonths: number | null
+  programFitScore?: number | null
+  programFitReasons?: string[]
   report: {
     summary: string
     market: string
@@ -63,16 +78,189 @@ export type Company = {
     higherIsBetter?: boolean
   }[]
   /** 지원 이력 타임라인 (선택적) */
-  supportHistory?: { year: number; program: string; amount: number }[]
+  supportHistory?: { year: number; program: string; amount: number | null }[]
   /** 업종 평균 대비 벤치마크 (선택적) */
   industryBenchmarks?: {
     label: string
     company: number
     industry: number
     unit: string
+    /** 외부 벤치마크의 연도·업종·기업규모 범위. */
+    context?: string
     /** 원 지표값이 클수록 유리한지 여부. 비교색의 의미를 결정한다. */
     higherIsBetter?: boolean
   }[]
+  /** 실제 리포트 API에서 내려온 실사·공고 검토 정보 */
+  dueDiligence?: {
+    asOfYear: number
+    roundId?: string | null
+    dataQuality: "high" | "medium" | "low"
+    officerBrief?: {
+      lines: string[]
+      priorityChecks: string[]
+      signalCounts: { red: number; yellow: number; green: number; gray: number }
+    }
+    summaryChecks: {
+      code?: string
+      label: string
+      status: "green" | "yellow" | "red" | "gray"
+      value: string
+      note: string | null
+      interpretation?: string | null
+    }[]
+    survivalIndicators?: Array<{
+      code: string
+      label: string
+      value: number | null
+      unit: string
+      pctl: number | null
+      cohortLabel?: string | null
+      status: string
+      flagReason: string | null
+      auc?: number | null
+      weight?: number | null
+    }>
+    referenceIndicators?: Array<{
+      code: string
+      label: string
+      value: number | null
+      unit: string
+      pctl: number | null
+      cohortLabel?: string | null
+      status: string
+      flagReason: string | null
+      auc?: number | null
+      weight?: number | null
+    }>
+    requirementResults: {
+      label: string
+      status: "met" | "not_met" | "unknown"
+      reason: string
+      weight: number | null
+    }[]
+    dataWarnings: string[]
+    followUpQuestions: string[]
+    ntisProjectCount: number
+    ntisFundingWon: number
+    evidenceIds: string[]
+    evidenceItems?: Array<{
+      evidenceId: string
+      sourceFile: string
+      sourceSheet: string | null
+      sourceCell: string | null
+      referenceYear: number | null
+      rawValue: string | number | null
+      normalizedValue: string | number | null
+      formula: string | null
+      formulaVersion: string
+      externalDatasetId: string | null
+      label?: string
+    }>
+    supportAudit: {
+      totalEpisodes: number
+      awardedEpisodes: number
+      rejectedOrWithdrawn: number
+      recent3yrAwarded: number
+      confirmedAmountMillion: number
+      awardedAmountMillion: number
+      missingAmountCount: number
+      zeroAmountCount: number
+      yearsReceived: number[]
+      badges: string[]
+      samePurposeRepeats: Array<{
+        purpose: string
+        episodeCount: number
+        years: number[]
+        totalAmountMillion: number
+        programNames: string[]
+      }>
+      repeatedPrograms: {
+        program: string
+        count: number
+        episodeIds: string[]
+      }[]
+      overlapPairs: {
+        firstProgram: string
+        secondProgram: string
+        overlapDays: number
+        purposeRelation?: string
+        firstAmountMillion: number | null
+        secondAmountMillion: number | null
+        evidenceIds: string[]
+      }[]
+      episodes: {
+        evidenceId: string
+        selectedDate: string | null
+        startDate?: string | null
+        endDate?: string | null
+        program: string
+        businessType: string | null
+        supportPurpose?: string | null
+        result?: string | null
+        isAwarded?: boolean
+        amountMillion: number | null
+        amountFlag?: string
+        components?: Array<{
+          supportType: string | null
+          supportItem: string | null
+          amountMillion: number | null
+        }>
+      }[]
+    }
+    observedChanges?: Array<{
+      episodeId: string
+      programName: string | null
+      selectedDate: string | null
+      preFy: number | null
+      postFy: number | null
+      revenueChangePct: number | null
+      employmentChange: number | null
+      newPatentCount: number | null
+      status: string
+      note: string | null
+    }>
+    financialDetails: {
+      year: number
+      netIncomeMillion: number | null
+      assetsMillion: number | null
+      liabilitiesMillion: number | null
+      equityMillion: number | null
+      operatingMarginPct: number | null
+    }[]
+    employmentDetails: {
+      year: number
+      enrolled: number | null
+      hired: number | null
+      left: number | null
+      averageSalaryMillion: number | null
+    }[]
+    technology: {
+      corporateLab: boolean
+      rdDepartment: boolean
+      researcherCount: number | null
+      patentRegistered: number | null
+      patentApplied: number | null
+      validPatentCount: number | null
+      rdIntensityPct: number | null
+    }
+    similarCompanies: {
+      companyId: number
+      industry: string
+      size: string
+      region: string
+      distance: number
+      comparedMetrics: string[]
+    }[]
+    regionalContext: {
+      status: "ok" | "not_applicable" | "not_available"
+      reason: string | null
+      regionName: string | null
+      referenceYear: number | null
+      establishmentCount: number | null
+      employeeCount: number | null
+      employeesPerEstablishment: number | null
+    }
+  }
 }
 
 export const programs: Program[] = [
@@ -142,7 +330,7 @@ export const companies: Company[] = [
       team:
         "최근 고용 인원은 48명이다. 대표자 이력과 학력·경력 구성은 현재 원천데이터에 없어 평가하지 않는다.",
       finance:
-        "2024년 매출 142억 원, 영업이익 21억 원이다. 유동비율·현금흐름·자금 런웨이는 원천 필드가 없어 판단할 수 없다.",
+        "2024년 매출 142억 원, 영업이익 21억 원으로 최근 사업규모와 영업 수익성을 함께 확인한다.",
     },
     survivalPercentiles: [
       { label: "매출 규모", pctl: 72, cohortLabel: "소프트웨어개발 소기업 (n=214)" },
@@ -212,7 +400,7 @@ export const companies: Company[] = [
       team:
         "최근 고용 인원은 76명이다. 대표자 이력과 인력의 학력·경력 구성은 현재 원천데이터에 없어 평가하지 않는다.",
       finance:
-        "2024년 매출 73억 원, 영업손실 9억 원이다. 유동비율·현금흐름·자금 런웨이는 원천 필드가 없어 별도 확인이 필요하다.",
+        "2024년 매출 73억 원, 영업손실 9억 원으로 매출 대비 손실 규모와 회복 추이를 우선 확인한다.",
     },
   },
   {
@@ -265,7 +453,7 @@ export const companies: Company[] = [
       team:
         "최근 고용 인원은 61명이다. 대표자 이력과 직무별 인력 구성은 현재 원천데이터에 없어 평가하지 않는다.",
       finance:
-        "2024년 매출 134억 원, 영업이익 8억 원이다. 유동비율과 현금성 자산 자료가 없어 단기 지급여력은 판단하지 않는다.",
+        "2024년 매출 134억 원, 영업이익 8억 원으로 영업 수익성과 자본 완충력을 함께 확인한다.",
     },
   },
   {
@@ -318,7 +506,7 @@ export const companies: Company[] = [
       team:
         "최근 고용 인원은 23명이다. 대표자 이력과 보안 전문인력 구성은 현재 원천데이터에 없어 평가하지 않는다.",
       finance:
-        "2024년 매출 38억 원, 영업손실 1억 원이다. 유동비율과 자금 런웨이 자료는 없어 후속 자금 필요성을 단정할 수 없다.",
+        "2024년 매출 38억 원, 영업손실 1억 원으로 손실 축소 여부와 고용 유지 추이를 우선 확인한다.",
     },
   },
   {
@@ -371,7 +559,7 @@ export const companies: Company[] = [
       team:
         "최근 고용 인원은 94명이다. 대표자 이력과 전력시장 전문인력 구성은 현재 원천데이터에 없어 평가하지 않는다.",
       finance:
-        "2024년 매출 268억 원, 영업이익 27억 원이다. 현금흐름과 자금 런웨이는 원천 필드가 없어 판단할 수 없다.",
+        "2024년 매출 268억 원, 영업이익 27억 원으로 사업규모와 영업 수익성이 확인된다.",
     },
   },
 ]

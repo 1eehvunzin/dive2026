@@ -1,10 +1,19 @@
 import crypto from 'crypto';
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db/connection';
+import { sendApiError } from '../lib/http';
 import type { Program, ProgramRequirement } from '../lib/types';
 
 const router = Router();
-const REVIEW_STATUSES = new Set(['draft', 'reviewed', 'active']);
+const REVIEW_STATUSES = new Set<Program['reviewStatus']>(['draft', 'reviewed', 'active']);
+const REQUIREMENT_TYPES = new Set<ProgramRequirement['type']>([
+  'eligibility',
+  'exclusion',
+  'preference',
+  'evaluation',
+  'document',
+  'obligation',
+]);
 
 type ProgramRow = {
   program_id: string;
@@ -65,13 +74,70 @@ function rowToProgram(row: ProgramRow): Program {
   };
 }
 
-function validateProgram(input: unknown): Omit<Program, 'id'> {
+export function validateProgram(input: unknown): Omit<Program, 'id'> {
   if (!input || typeof input !== 'object') throw new Error('body must be an object');
   const body = input as Partial<Program>;
   if (!body.title?.trim()) throw new Error('title is required');
-  const reviewStatus = body.reviewStatus || 'draft';
-  if (!REVIEW_STATUSES.has(reviewStatus)) throw new Error('invalid reviewStatus');
-  const requirements = Array.isArray(body.requirements) ? body.requirements : [];
+  const reviewStatus = String(body.reviewStatus || 'draft');
+  if (!REVIEW_STATUSES.has(reviewStatus as Program['reviewStatus'])) throw new Error('invalid reviewStatus');
+  if (body.requirements !== undefined && !Array.isArray(body.requirements)) {
+    throw new Error('requirements must be an array');
+  }
+  const requirements = body.requirements || [];
+  const requirementIds = new Set<string>();
+  const normalizedRequirements = requirements.map((rawRequirement, index): ProgramRequirement => {
+    if (!rawRequirement || typeof rawRequirement !== 'object' || Array.isArray(rawRequirement)) {
+      throw new Error(`requirements[${index}] must be an object`);
+    }
+    const requirement = rawRequirement as Partial<ProgramRequirement>;
+    const type = String(requirement.type || '');
+    if (!REQUIREMENT_TYPES.has(type as ProgramRequirement['type'])) {
+      throw new Error(`requirements[${index}].type is invalid`);
+    }
+    const label = String(requirement.label || '').trim();
+    if (!label) throw new Error(`requirements[${index}].label is required`);
+    const requirementStatus = String(requirement.reviewStatus || 'draft');
+    if (!REVIEW_STATUSES.has(requirementStatus as ProgramRequirement['reviewStatus'])) {
+      throw new Error(`requirements[${index}].reviewStatus is invalid`);
+    }
+    const id = String(requirement.id || `req-${index + 1}-${crypto.randomUUID()}`).trim();
+    if (!id) throw new Error(`requirements[${index}].id is invalid`);
+    if (requirementIds.has(id)) throw new Error(`duplicate requirement id: ${id}`);
+    requirementIds.add(id);
+    if (
+      requirement.rule !== undefined
+      && requirement.rule !== null
+      && (typeof requirement.rule !== 'object' || Array.isArray(requirement.rule))
+    ) {
+      throw new Error(`requirements[${index}].rule must be an object or null`);
+    }
+    if (
+      requirement.weight !== undefined
+      && requirement.weight !== null
+      && (!Number.isFinite(requirement.weight) || requirement.weight < 0)
+    ) {
+      throw new Error(`requirements[${index}].weight must be a non-negative number or null`);
+    }
+    if (
+      requirement.sourcePage !== undefined
+      && requirement.sourcePage !== null
+      && (!Number.isInteger(requirement.sourcePage) || requirement.sourcePage < 1)
+    ) {
+      throw new Error(`requirements[${index}].sourcePage must be a positive integer or null`);
+    }
+    return {
+      id,
+      type: type as ProgramRequirement['type'],
+      label,
+      rule: requirement.rule && typeof requirement.rule === 'object'
+        ? requirement.rule as Record<string, unknown>
+        : null,
+      weight: typeof requirement.weight === 'number' ? requirement.weight : null,
+      sourcePage: typeof requirement.sourcePage === 'number' ? requirement.sourcePage : null,
+      sourceText: requirement.sourceText ? String(requirement.sourceText) : null,
+      reviewStatus: requirementStatus as ProgramRequirement['reviewStatus'],
+    };
+  });
   return {
     title: body.title.trim(),
     agency: String(body.agency || ''),
@@ -82,18 +148,9 @@ function validateProgram(input: unknown): Omit<Program, 'id'> {
     targetStage: String(body.targetStage || ''),
     keywords: Array.isArray(body.keywords) ? body.keywords.map(String).slice(0, 30) : [],
     description: String(body.description || ''),
-    reviewStatus,
+    reviewStatus: reviewStatus as Program['reviewStatus'],
     documentId: body.documentId || null,
-    requirements: requirements.map((requirement, index) => ({
-      id: requirement.id || `req-${index + 1}-${crypto.randomUUID()}`,
-      type: requirement.type,
-      label: String(requirement.label || '').trim(),
-      rule: requirement.rule && typeof requirement.rule === 'object' ? requirement.rule : null,
-      weight: typeof requirement.weight === 'number' ? requirement.weight : null,
-      sourcePage: typeof requirement.sourcePage === 'number' ? requirement.sourcePage : null,
-      sourceText: requirement.sourceText ? String(requirement.sourceText) : null,
-      reviewStatus: REVIEW_STATUSES.has(requirement.reviewStatus) ? requirement.reviewStatus : 'draft',
-    })).filter(requirement => requirement.label),
+    requirements: normalizedRequirements,
   };
 }
 
@@ -168,7 +225,7 @@ router.get('/', (_req, res) => {
 
 router.get('/:id', (req, res) => {
   const row = getDb().prepare('SELECT * FROM program_master WHERE program_id = ?').get(req.params.id) as ProgramRow | undefined;
-  if (!row) return res.status(404).json({ error: 'Program not found' });
+  if (!row) return sendApiError(res, 404, 'PROGRAM_NOT_FOUND', 'Program not found');
   return res.json(rowToProgram(row));
 });
 
@@ -177,7 +234,12 @@ router.post('/', (req: Request, res: Response) => {
     const input = validateProgram(req.body);
     return res.status(201).json(saveProgram(`prog-${crypto.randomUUID()}`, input));
   } catch (error) {
-    return res.status(400).json({ error: String(error instanceof Error ? error.message : error) });
+    return sendApiError(
+      res,
+      400,
+      'INVALID_PROGRAM',
+      String(error instanceof Error ? error.message : error),
+    );
   }
 });
 
@@ -185,10 +247,15 @@ router.put('/:id', (req: Request, res: Response) => {
   try {
     const programId = String(req.params.id);
     const exists = getDb().prepare('SELECT 1 FROM program_master WHERE program_id = ?').get(programId);
-    if (!exists) return res.status(404).json({ error: 'Program not found' });
+    if (!exists) return sendApiError(res, 404, 'PROGRAM_NOT_FOUND', 'Program not found');
     return res.json(saveProgram(programId, validateProgram(req.body)));
   } catch (error) {
-    return res.status(400).json({ error: String(error instanceof Error ? error.message : error) });
+    return sendApiError(
+      res,
+      400,
+      'INVALID_PROGRAM',
+      String(error instanceof Error ? error.message : error),
+    );
   }
 });
 
