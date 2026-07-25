@@ -1,47 +1,70 @@
+"use client"
+
+import { useCallback, useState } from "react"
+import { Bell, HelpCircle } from "lucide-react"
+import { Sidebar } from "@/components/sidebar"
+import { CompanyView } from "@/components/company-view"
+import { CompanyReport } from "@/components/company-report"
+import { AgentPanel } from "@/components/agent-panel"
+import { type Company } from "@/lib/mock-data"
+
 export default function Page() {
+  const [selected, setSelected] = useState<Company | null>(null)
+  const [agentOpen, setAgentOpen] = useState(false)
+  const [pendingContext, setPendingContext] = useState<string | null>(null)
+
+  const handleAsk = useCallback((context: string) => {
+    setPendingContext(context)
+    setAgentOpen(true)
+  }, [])
+
   return (
-    <main
-      style={{
-        colorScheme: 'light dark',
-        position: 'relative',
-        display: 'flex',
-        minHeight: '100vh',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'light-dark(#fff, #000)',
-        color: 'light-dark(#000, #fff)',
-      }}
-    >
-      <svg
-        aria-hidden="true"
-        style={{ width: 80, height: 80 }}
-        width={80}
-        height={80}
-        fill="none"
-        viewBox="0 0 20 20"
-        xmlns="http://www.w3.org/2000/svg"
-        stroke="currentColor"
-        strokeWidth="0.5"
-      >
-        <path
-          d="M14.2 14.2H17V6.9375C17 4.76288 15.2371 3 13.0625 3H5.8V5.8M14.2 14.2V7.79063L7.79062 14.2H14.2ZM14.2 14.2V17H6.9375C4.76288 17 3 15.2371 3 13.0625V5.8H5.8M5.8 5.8V12.2313L12.2313 5.8H5.8Z"
-          strokeLinejoin="round"
+    <div className="flex min-h-screen bg-background">
+      <Sidebar active={selected ? "companies" : "programs"} />
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-background/80 px-6 py-3.5 backdrop-blur">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">지원사업</span>
+            <span className="text-muted-foreground">/</span>
+            <span className="font-medium text-foreground">{selected ? selected.name : "추천 기업 순위"}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button className="rounded-md p-2 text-muted-foreground hover:bg-secondary">
+              <HelpCircle className="h-4.5 w-4.5" />
+            </button>
+            <button className="rounded-md p-2 text-muted-foreground hover:bg-secondary">
+              <Bell className="h-4.5 w-4.5" />
+            </button>
+          </div>
+        </header>
+
+        <main className="flex-1">
+          {selected ? (
+            <CompanyReport
+              company={selected}
+              onBack={() => {
+                setSelected(null)
+                setAgentOpen(false)
+              }}
+              onAsk={handleAsk}
+              onOpenAgent={() => setAgentOpen(true)}
+            />
+          ) : (
+            <CompanyView onSelectCompany={(c) => setSelected(c)} />
+          )}
+        </main>
+      </div>
+
+      {selected && (
+        <AgentPanel
+          company={selected}
+          open={agentOpen}
+          onClose={() => setAgentOpen(false)}
+          pendingContext={pendingContext}
+          onContextConsumed={() => setPendingContext(null)}
         />
-      </svg>
-      <p
-        style={{
-          position: 'absolute',
-          left: '50%',
-          top: 'calc(50% + 56px)',
-          transform: 'translateX(-50%)',
-          whiteSpace: 'nowrap',
-          fontSize: '14px',
-          fontWeight: 500,
-          color: 'light-dark(#71717a, #a1a1aa)',
-        }}
-      >
-        Your v0 generation will show here.
-      </p>
-    </main>
+      )}
+    </div>
   )
 }
