@@ -13,6 +13,8 @@ import {
   SlidersHorizontal,
   CheckSquare,
   Square,
+  Sparkles,
+  FileUp,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { companies, type Company, type Program } from "@/lib/mock-data"
@@ -30,6 +32,29 @@ function ScorePill({ score }: { score: number }) {
       {score}
       <span className="text-xs font-normal opacity-70">점</span>
     </span>
+  )
+}
+
+function RegisterBanner({ onRegister }: { onRegister: () => void }) {
+  return (
+    <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-primary/20 bg-primary/5 p-5">
+      <div className="flex items-start gap-3.5">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Sparkles className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">지원사업 공고를 등록해 보세요</h2>
+          <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground">
+            지금은 전체 기업 풀을 기본 순위로 보고 있습니다. 공고문 PDF를 등록하면 사업 요건에 맞춘 맞춤 추천 순위와
+            기업 선정·리포트 기능을 사용할 수 있습니다.
+          </p>
+        </div>
+      </div>
+      <Button onClick={onRegister} className="gap-1.5">
+        <FileUp className="h-4 w-4" />
+        공고문 등록
+      </Button>
+    </section>
   )
 }
 
@@ -96,12 +121,14 @@ function CompanyRow({
   onSelect,
   picked,
   onToggle,
+  canSelect,
 }: {
   company: Company
   rank: number
   onSelect: () => void
   picked: boolean
   onToggle: () => void
+  canSelect: boolean
 }) {
   const revenueGrowth = Math.round(
     ((company.financials[company.financials.length - 1].revenue - company.financials[0].revenue) /
@@ -153,19 +180,21 @@ function CompanyRow({
           <p className="text-sm font-semibold text-foreground">{company.fundingTotal}</p>
         </div>
         <ScorePill score={company.matchScore} />
-        <button
-          onClick={onToggle}
-          aria-label={picked ? "선정 목록에서 제거" : "선정 목록에 추가"}
-          className={cn(
-            "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
-            picked
-              ? "border-primary/40 bg-primary/10 text-primary"
-              : "border-border text-muted-foreground hover:border-primary/40 hover:text-primary",
-          )}
-        >
-          {picked ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
-          {picked ? "선정됨" : "선정"}
-        </button>
+        {canSelect && (
+          <button
+            onClick={onToggle}
+            aria-label={picked ? "선정 목록에서 제거" : "선정 목록에 추가"}
+            className={cn(
+              "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
+              picked
+                ? "border-primary/40 bg-primary/10 text-primary"
+                : "border-border text-muted-foreground hover:border-primary/40 hover:text-primary",
+            )}
+          >
+            {picked ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+            {picked ? "선정됨" : "선정"}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -175,26 +204,37 @@ export function CompanyView({
   program,
   onSelectCompany,
   onEditProgram,
+  onRegisterProgram,
   shortlist,
   onToggleShortlist,
 }: {
-  program: Program
+  program?: Program | null
   onSelectCompany: (c: Company) => void
   onEditProgram: () => void
+  onRegisterProgram: () => void
   shortlist: string[]
   onToggleShortlist: (id: string) => void
 }) {
   const sorted = [...companies].sort((a, b) => b.matchScore - a.matchScore)
+  const canSelect = !!program
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
-      <ProgramCard program={program} onEdit={onEditProgram} />
+      {program ? (
+        <ProgramCard program={program} onEdit={onEditProgram} />
+      ) : (
+        <RegisterBanner onRegister={onRegisterProgram} />
+      )}
 
       <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-foreground">추천 기업 순위</h2>
+          <h2 className="text-lg font-semibold text-foreground">
+            {program ? "추천 기업 순위" : "전체 기업 풀"}
+          </h2>
           <p className="text-sm text-muted-foreground">
-            등록된 지원사업 기준 · 총 {sorted.length}개 기업이 매칭 점수 순으로 정렬되었습니다
+            {program
+              ? `등록된 지원사업 기준 · 총 ${sorted.length}개 기업이 매칭 점수 순으로 정렬되었습니다`
+              : `총 ${sorted.length}개 기업 · 공고를 등록하면 사업 요건에 맞춰 순위가 재계산됩니다`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -218,6 +258,7 @@ export function CompanyView({
             onSelect={() => onSelectCompany(company)}
             picked={shortlist.includes(company.id)}
             onToggle={() => onToggleShortlist(company.id)}
+            canSelect={canSelect}
           />
         ))}
       </div>
