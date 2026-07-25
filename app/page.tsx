@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useMemo, useState } from "react"
-import { Bell, HelpCircle, Landmark } from "lucide-react"
+import { HelpCircle, Landmark } from "lucide-react"
 import { Sidebar } from "@/components/sidebar"
 import { NavTabs } from "@/components/nav-tabs"
 import { CompanyView } from "@/components/company-view"
@@ -212,27 +212,6 @@ export default function Page() {
               className="flex h-9 w-9 items-center justify-center rounded-lg text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
             >
               <HelpCircle className="h-4.5 w-4.5" />
-            </button>
-            <button
-              aria-label="알림"
-              className="relative flex h-9 w-9 items-center justify-center rounded-lg text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-            >
-              <Bell className="h-4.5 w-4.5" />
-              <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-warning ring-2 ring-sidebar" />
-            </button>
-
-            {/* Divider */}
-            <span className="mx-1.5 hidden h-6 w-px bg-sidebar-border/70 sm:block" />
-
-            {/* Account */}
-            <button className="flex items-center gap-2.5 rounded-lg py-1 pl-1 pr-2 transition-colors hover:bg-sidebar-accent">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-sidebar-primary/25 text-xs font-semibold text-sidebar-foreground">
-                산진
-              </span>
-              <span className="hidden text-left leading-tight md:block">
-                <span className="block text-sm font-medium">산업진흥원</span>
-                <span className="block text-xs text-sidebar-foreground/60">기업지원팀</span>
-              </span>
             </button>
           </div>
         </div>

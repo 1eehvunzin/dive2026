@@ -226,27 +226,18 @@ export function CompanyView({
         <RegisterBanner onRegister={onRegisterProgram} />
       )}
 
-      <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">
-            {program ? "추천 기업 순위" : "전체 기업 풀"}
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            {program
-              ? `등록된 지원사업 기준 · 총 ${sorted.length}개 기업이 매칭 점수 순으로 정렬되었습니다`
-              : `총 ${sorted.length}개 기업 · 공고를 등록하면 사업 요건에 맞춰 순위가 재계산됩니다`}
-          </p>
+      <div className="mt-8 flex items-center gap-2">
+        <div className="flex flex-1 items-center gap-2.5 rounded-lg border border-border bg-card px-3.5 py-3 text-sm text-muted-foreground focus-within:border-primary focus-within:ring-2 focus-within:ring-ring/20">
+          <Search className="h-4.5 w-4.5 shrink-0" />
+          <input
+            placeholder="사업자 등록번호, 기업명 등을 검색해보세요"
+            className="w-full bg-transparent text-foreground outline-none placeholder:text-muted-foreground"
+          />
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
-            <Search className="h-4 w-4" />
-            <input placeholder="기업 검색" className="w-28 bg-transparent outline-none placeholder:text-muted-foreground" />
-          </div>
-          <Button variant="outline" size="sm" className="gap-1.5">
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            필터
-          </Button>
-        </div>
+        <Button variant="outline" className="h-11 gap-1.5">
+          <SlidersHorizontal className="h-4 w-4" />
+          필터
+        </Button>
       </div>
 
       <div className="mt-4 flex flex-col gap-3">

@@ -1,7 +1,6 @@
 "use client"
 
-import { useState } from "react"
-import { FileText, Settings, Plus, ChevronsUpDown, Check } from "lucide-react"
+import { FileText, Settings, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export function Sidebar({
@@ -15,62 +14,18 @@ export function Sidebar({
   onSwitchProgram?: (id: string) => void
   onNewProgram?: () => void
 }) {
-  const [open, setOpen] = useState(false)
-  const activeProgram = programs.find((p) => p.id === activeId)
   const hasProgram = programs.length > 0
 
   return (
     <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:flex">
-      {/* Program switcher */}
-      <div className="relative px-3 pb-2 pt-4">
+      {/* New program action */}
+      <div className="px-3 pb-2 pt-4">
         <p className="px-2 pb-1.5 text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/40">
           지원사업 공고
         </p>
         <button
-          onClick={() => hasProgram && setOpen((o) => !o)}
-          className={cn(
-            "flex w-full items-center gap-2 rounded-lg border border-sidebar-border bg-sidebar-accent/40 px-3 py-2.5 text-left transition-colors",
-            hasProgram && "hover:bg-sidebar-accent",
-          )}
-        >
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-sidebar-foreground">
-              {activeProgram ? activeProgram.title : "등록된 공고 없음"}
-            </p>
-            <p className="text-[11px] text-sidebar-foreground/50">
-              {hasProgram ? `${programs.length}개 공고 관리 중` : "새 공고를 등록하세요"}
-            </p>
-          </div>
-          {hasProgram && <ChevronsUpDown className="h-4 w-4 shrink-0 text-sidebar-foreground/50" />}
-        </button>
-
-        {open && hasProgram && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-            <div className="absolute left-3 right-3 z-20 mt-1 overflow-hidden rounded-lg border border-sidebar-border bg-sidebar shadow-xl">
-              {programs.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => {
-                    onSwitchProgram?.(p.id)
-                    setOpen(false)
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-sidebar-foreground/85 transition-colors hover:bg-sidebar-accent"
-                >
-                  <span className="min-w-0 flex-1 truncate">{p.title}</span>
-                  {p.id === activeId && <Check className="h-4 w-4 shrink-0 text-sidebar-primary" />}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-
-        <button
-          onClick={() => {
-            setOpen(false)
-            onNewProgram?.()
-          }}
-          className="mt-1.5 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          onClick={() => onNewProgram?.()}
+          className="flex w-full items-center gap-2 rounded-lg border border-dashed border-sidebar-border px-3 py-2.5 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:border-sidebar-primary/50 hover:bg-sidebar-accent hover:text-sidebar-foreground"
         >
           <Plus className="h-4 w-4" />새 공고 등록
         </button>
