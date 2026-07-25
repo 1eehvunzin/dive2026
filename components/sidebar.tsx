@@ -1,15 +1,14 @@
 "use client"
 
-import { LayoutDashboard, FileText, Building2, CheckSquare, Settings, Landmark } from "lucide-react"
+import { FileText, Building2, CheckSquare, Settings, Landmark } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-export type ViewId = "programs" | "companies" | "shortlist" | "overview"
+export type ViewId = "programs" | "companies" | "shortlist"
 
 const nav: { id: ViewId; label: string; icon: typeof FileText }[] = [
   { id: "programs", label: "지원사업 등록", icon: FileText },
   { id: "companies", label: "추천 기업", icon: Building2 },
   { id: "shortlist", label: "선정 목록", icon: CheckSquare },
-  { id: "overview", label: "현황 대시보드", icon: LayoutDashboard },
 ]
 
 export function Sidebar({

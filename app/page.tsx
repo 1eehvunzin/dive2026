@@ -5,7 +5,6 @@ import { Bell, HelpCircle } from "lucide-react"
 import { Sidebar, type ViewId } from "@/components/sidebar"
 import { CompanyView } from "@/components/company-view"
 import { CompanyReport } from "@/components/company-report"
-import { DashboardView } from "@/components/dashboard-view"
 import { ShortlistView } from "@/components/shortlist-view"
 import { AgentPanel } from "@/components/agent-panel"
 import { type Company } from "@/lib/mock-data"
@@ -14,7 +13,6 @@ const viewLabels: Record<ViewId, string> = {
   programs: "추천 기업 순위",
   companies: "추천 기업 순위",
   shortlist: "선정 목록",
-  overview: "현황 대시보드",
 }
 
 export default function Page() {
@@ -77,8 +75,6 @@ export default function Page() {
               picked={shortlist.includes(selected.id)}
               onToggleShortlist={() => toggleShortlist(selected.id)}
             />
-          ) : view === "overview" ? (
-            <DashboardView shortlist={shortlist} onSelectCompany={openReport} />
           ) : view === "shortlist" ? (
             <ShortlistView
               shortlist={shortlist}
