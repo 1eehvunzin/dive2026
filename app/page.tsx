@@ -6,17 +6,19 @@ import { Sidebar, type ViewId } from "@/components/sidebar"
 import { CompanyView } from "@/components/company-view"
 import { CompanyReport } from "@/components/company-report"
 import { ShortlistView } from "@/components/shortlist-view"
+import { ProgramRegister } from "@/components/program-register"
 import { AgentPanel } from "@/components/agent-panel"
-import { type Company } from "@/lib/mock-data"
+import { type Company, type Program } from "@/lib/mock-data"
 
 const viewLabels: Record<ViewId, string> = {
-  programs: "추천 기업 순위",
+  programs: "지원사업 등록",
   companies: "추천 기업 순위",
   shortlist: "선정 목록",
 }
 
 export default function Page() {
-  const [view, setView] = useState<ViewId>("companies")
+  const [view, setView] = useState<ViewId>("programs")
+  const [program, setProgram] = useState<Program | null>(null)
   const [selected, setSelected] = useState<Company | null>(null)
   const [agentOpen, setAgentOpen] = useState(false)
   const [pendingContext, setPendingContext] = useState<string | null>(null)
@@ -38,6 +40,11 @@ export default function Page() {
   }, [])
 
   const openReport = useCallback((c: Company) => setSelected(c), [])
+
+  const handleRegistered = useCallback((p: Program) => {
+    setProgram(p)
+    setView("companies")
+  }, [])
 
   const crumb = selected ? selected.name : viewLabels[view]
 
@@ -75,6 +82,8 @@ export default function Page() {
               picked={shortlist.includes(selected.id)}
               onToggleShortlist={() => toggleShortlist(selected.id)}
             />
+          ) : view === "programs" || !program ? (
+            <ProgramRegister onComplete={handleRegistered} />
           ) : view === "shortlist" ? (
             <ShortlistView
               shortlist={shortlist}
@@ -84,7 +93,9 @@ export default function Page() {
             />
           ) : (
             <CompanyView
+              program={program}
               onSelectCompany={openReport}
+              onEditProgram={() => setView("programs")}
               shortlist={shortlist}
               onToggleShortlist={toggleShortlist}
             />

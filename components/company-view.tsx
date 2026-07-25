@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from "react"
 import {
   Building2,
   Calendar,
@@ -16,7 +15,7 @@ import {
   Square,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { programs, companies, type Company } from "@/lib/mock-data"
+import { companies, type Company, type Program } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
 
 function ScorePill({ score }: { score: number }) {
@@ -34,8 +33,8 @@ function ScorePill({ score }: { score: number }) {
   )
 }
 
-function ProgramCard({ onEdit }: { onEdit: () => void }) {
-  const p = programs[0]
+function ProgramCard({ program, onEdit }: { program: Program; onEdit: () => void }) {
+  const p = program
   return (
     <section className="rounded-xl border border-border bg-card p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -172,75 +171,24 @@ function CompanyRow({
   )
 }
 
-function RegistrationForm({ onDone }: { onDone: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4" onClick={onDone}>
-      <div
-        className="w-full max-w-xl rounded-xl border border-border bg-card p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-lg font-semibold text-foreground">지원사업 등록 / 수정</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          사업 정보를 입력하면 AI가 기업 풀을 분석해 추천 순위를 재계산합니다.
-        </p>
-        <div className="mt-5 grid gap-4">
-          <div>
-            <label className="text-sm font-medium text-foreground">사업명</label>
-            <input
-              defaultValue={programs[0].title}
-              className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/20"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium text-foreground">지원 분야</label>
-              <input
-                defaultValue={programs[0].field}
-                className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/20"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-foreground">기업당 지원 규모</label>
-              <input
-                defaultValue={programs[0].supportPerCompany}
-                className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/20"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="text-sm font-medium text-foreground">평가 키워드</label>
-            <input
-              defaultValue={programs[0].keywords.join(", ")}
-              className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/20"
-            />
-          </div>
-        </div>
-        <div className="mt-6 flex justify-end gap-2">
-          <Button variant="outline" onClick={onDone}>
-            취소
-          </Button>
-          <Button onClick={onDone}>저장 후 재분석</Button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export function CompanyView({
+  program,
   onSelectCompany,
+  onEditProgram,
   shortlist,
   onToggleShortlist,
 }: {
+  program: Program
   onSelectCompany: (c: Company) => void
+  onEditProgram: () => void
   shortlist: string[]
   onToggleShortlist: (id: string) => void
 }) {
-  const [editing, setEditing] = useState(false)
   const sorted = [...companies].sort((a, b) => b.matchScore - a.matchScore)
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
-      <ProgramCard onEdit={() => setEditing(true)} />
+      <ProgramCard program={program} onEdit={onEditProgram} />
 
       <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -273,8 +221,6 @@ export function CompanyView({
           />
         ))}
       </div>
-
-      {editing && <RegistrationForm onDone={() => setEditing(false)} />}
     </div>
   )
 }
