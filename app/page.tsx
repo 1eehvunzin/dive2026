@@ -2,7 +2,8 @@
 
 import { useCallback, useMemo, useState } from "react"
 import { Bell, HelpCircle } from "lucide-react"
-import { Sidebar, type ViewId } from "@/components/sidebar"
+import { Sidebar } from "@/components/sidebar"
+import { NavTabs } from "@/components/nav-tabs"
 import { CompanyView } from "@/components/company-view"
 import { CompanyReport } from "@/components/company-report"
 import { ShortlistView } from "@/components/shortlist-view"
@@ -10,7 +11,14 @@ import { ProgramRegister } from "@/components/program-register"
 import { HistoryView } from "@/components/history-view"
 import { EmptyLanding } from "@/components/empty-landing"
 import { AgentPanel } from "@/components/agent-panel"
-import { companies, type Company, type Program, type ProgramRecord, type HistoryEvent } from "@/lib/mock-data"
+import {
+  companies,
+  type Company,
+  type Program,
+  type ProgramRecord,
+  type HistoryEvent,
+  type ViewId,
+} from "@/lib/mock-data"
 
 const viewLabels: Record<ViewId, string> = {
   companies: "추천 기업 순위",
@@ -124,7 +132,16 @@ export default function Page() {
   }, [])
 
   const programList = records.map((r) => ({ id: r.program.id, title: r.program.title }))
-  const crumb = selected ? selected.name : registering || !activeRecord ? "지원사업 등록" : viewLabels[view]
+  const showTabs = !selected && !registering
+  const crumb = selected
+    ? selected.name
+    : registering
+      ? editing
+        ? "공고 수정"
+        : "지원사업 등록"
+      : activeRecord
+        ? activeRecord.program.title
+        : "지원사업 등록"
 
   function renderMain() {
     if (selected) {
@@ -146,6 +163,7 @@ export default function Page() {
       return <ProgramRegister onComplete={handleRegistered} initial={editing} />
     }
     if (!activeRecord) {
+      // No program registered yet: the 추천 기업 tab is reachable and shows the empty landing.
       return <EmptyLanding onRegister={startNewProgram} />
     }
     if (view === "shortlist") {
@@ -179,9 +197,6 @@ export default function Page() {
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar
-        active={view}
-        onNavigate={handleNavigate}
-        shortlistCount={shortlist.length}
         programs={programList}
         activeId={activeId}
         onSwitchProgram={switchProgram}
@@ -189,19 +204,33 @@ export default function Page() {
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-background/80 px-6 py-3.5 backdrop-blur">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">지원사업</span>
-            <span className="text-muted-foreground">/</span>
-            <span className="font-medium text-foreground">{crumb}</span>
+        <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur">
+          <div className="flex items-center justify-between px-6 pt-3">
+            <div className="flex min-w-0 items-center gap-2 text-sm">
+              <span className="text-muted-foreground">지원사업</span>
+              <span className="text-muted-foreground">/</span>
+              <span className="truncate font-medium text-foreground">{crumb}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <button className="rounded-md p-2 text-muted-foreground hover:bg-secondary">
+                <HelpCircle className="h-4.5 w-4.5" />
+              </button>
+              <button className="rounded-md p-2 text-muted-foreground hover:bg-secondary">
+                <Bell className="h-4.5 w-4.5" />
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-1">
-            <button className="rounded-md p-2 text-muted-foreground hover:bg-secondary">
-              <HelpCircle className="h-4.5 w-4.5" />
-            </button>
-            <button className="rounded-md p-2 text-muted-foreground hover:bg-secondary">
-              <Bell className="h-4.5 w-4.5" />
-            </button>
+          <div className="px-4 pb-1 pt-1.5">
+            {showTabs ? (
+              <NavTabs
+                active={view}
+                onNavigate={handleNavigate}
+                hasProgram={!!activeRecord}
+                shortlistCount={shortlist.length}
+              />
+            ) : (
+              <div className="h-9" />
+            )}
           </div>
         </header>
 

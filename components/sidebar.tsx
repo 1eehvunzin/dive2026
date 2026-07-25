@@ -1,29 +1,15 @@
 "use client"
 
 import { useState } from "react"
-import { Building2, CheckSquare, Clock, Settings, Landmark, Plus, ChevronsUpDown, Check } from "lucide-react"
+import { FileText, Settings, Landmark, Plus, ChevronsUpDown, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-export type ViewId = "companies" | "shortlist" | "history"
-
-const nav: { id: ViewId; label: string; icon: typeof Building2 }[] = [
-  { id: "companies", label: "추천 기업", icon: Building2 },
-  { id: "shortlist", label: "선정 목록", icon: CheckSquare },
-  { id: "history", label: "활동 히스토리", icon: Clock },
-]
-
 export function Sidebar({
-  active = "companies",
-  onNavigate,
-  shortlistCount = 0,
   programs = [],
   activeId = null,
   onSwitchProgram,
   onNewProgram,
 }: {
-  active?: ViewId
-  onNavigate?: (id: ViewId) => void
-  shortlistCount?: number
   programs?: { id: string; title: string }[]
   activeId?: string | null
   onSwitchProgram?: (id: string) => void
@@ -100,43 +86,30 @@ export function Sidebar({
         </button>
       </div>
 
-      <nav className="mt-2 flex flex-1 flex-col gap-1 border-t border-sidebar-border/60 px-3 py-3">
-        {nav.map((item) => {
-          const Icon = item.icon
-          const isActive = item.id === active
-          const disabled = !hasProgram
-          return (
+      {hasProgram && (
+        <nav className="mt-1 flex flex-1 flex-col gap-1 overflow-y-auto border-t border-sidebar-border/60 px-3 py-3">
+          <p className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/40">
+            공고 목록
+          </p>
+          {programs.map((p) => (
             <button
-              key={item.id}
-              onClick={() => onNavigate?.(item.id)}
-              aria-current={isActive ? "page" : undefined}
-              disabled={disabled}
+              key={p.id}
+              onClick={() => onSwitchProgram?.(p.id)}
+              aria-current={p.id === activeId ? "true" : undefined}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
-                disabled && "cursor-not-allowed opacity-40",
-                isActive
+                "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
+                p.id === activeId
                   ? "bg-sidebar-primary text-sidebar-primary-foreground"
                   : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
               )}
             >
-              <Icon className="h-4.5 w-4.5" />
-              <span className="flex-1 text-left">{item.label}</span>
-              {item.id === "shortlist" && shortlistCount > 0 && (
-                <span
-                  className={cn(
-                    "rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
-                    isActive
-                      ? "bg-sidebar-primary-foreground/20 text-sidebar-primary-foreground"
-                      : "bg-sidebar-primary/25 text-sidebar-foreground",
-                  )}
-                >
-                  {shortlistCount}
-                </span>
-              )}
+              <FileText className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 flex-1 truncate">{p.title}</span>
             </button>
-          )
-        })}
-      </nav>
+          ))}
+        </nav>
+      )}
+      {!hasProgram && <div className="flex-1 border-t border-sidebar-border/60" />}
 
       <div className="px-3 pb-4">
         <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent">
