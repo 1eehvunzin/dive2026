@@ -26,7 +26,7 @@ export function EmptyLanding({ onRegister }: { onRegister: () => void }) {
       <div className="mt-14 grid w-full gap-4 sm:grid-cols-3">
         {[
           { icon: FileUp, title: "1. 공고문 등록", desc: "PDF를 올리면 사업 요건을 자동 추출합니다." },
-          { icon: Sparkles, title: "2. AI 매칭 분석", desc: "기업 풀을 분석해 적합도 점수를 산출합니다." },
+          { icon: Sparkles, title: "2. 요건별 근거 분석", desc: "자격·배제요건과 평가항목별 기업 근거를 정리합니다." },
           { icon: Building2, title: "3. 추천 기업 확인", desc: "추천 순위와 리포트를 확인하고 즐겨찾기에 추가합니다." },
         ].map((s) => {
           const Icon = s.icon

@@ -26,35 +26,20 @@ import { companies, type Company, type Program } from "@/lib/mock-data"
 import { assessFinancialRisk, riskTierOrder } from "@/lib/risk"
 import { cn } from "@/lib/utils"
 
-const revenueGrowth = (c: Company) =>
-  Math.round(
-    ((c.financials[c.financials.length - 1].revenue - c.financials[0].revenue) / c.financials[0].revenue) * 100,
-  )
+const revenueGrowth = (c: Company) => {
+  const values = c.financials.map((point) => point.revenue).filter((value): value is number => value !== null)
+  if (values.length < 2 || values[0] === 0) return null
+  return Math.round(((values.at(-1)! - values[0]) / Math.abs(values[0])) * 100)
+}
 
-type SortKey = "recommended" | "recommended-asc" | "growth" | "employees" | "financial-risk"
+type SortKey = "revenue" | "growth" | "employees" | "financial-risk"
 
 const sortOptions: { key: SortKey; label: string }[] = [
-  { key: "recommended", label: "추천순" },
-  { key: "recommended-asc", label: "추천 역순" },
-  { key: "financial-risk", label: "재무 안정순" },
+  { key: "revenue", label: "최근 매출 규모순" },
+  { key: "financial-risk", label: "재무 위험 낮은순" },
   { key: "growth", label: "매출 성장순" },
   { key: "employees", label: "임직원 규모순" },
 ]
-
-function ScorePill({ score }: { score: number }) {
-  const tone =
-    score >= 90
-      ? "bg-success/15 text-success"
-      : score >= 80
-        ? "bg-primary/15 text-primary"
-        : "bg-warning/15 text-warning"
-  return (
-    <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-sm font-semibold tabular-nums", tone)}>
-      {score}
-      <span className="text-xs font-normal opacity-70">점</span>
-    </span>
-  )
-}
 
 function RegisterBanner({ onRegister }: { onRegister: () => void }) {
   return (
@@ -66,8 +51,8 @@ function RegisterBanner({ onRegister }: { onRegister: () => void }) {
         <div>
           <h2 className="text-sm font-semibold text-foreground">지원사업 공고를 등록해 보세요</h2>
           <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground">
-            지금은 전체 기업 풀을 기본 순위로 보고 있습니다. 공고문 PDF를 등록하면 사업 요건에 맞춘 맞춤 추천 순위와
-            기업 즐겨찾기·리포트 기능을 사용할 수 있습니다.
+            지금은 최근 매출·고용·재무 신호처럼 확인 가능한 데이터로 기업 풀을 정렬합니다. 공고문 PDF를 등록하면
+            자격·배제요건과 평가항목별 근거를 함께 검토할 수 있습니다.
           </p>
         </div>
       </div>
@@ -159,9 +144,6 @@ function CompanyRow({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="truncate font-semibold text-foreground">{company.name}</h3>
-            <span className="rounded bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-secondary-foreground">
-              {company.stage}
-            </span>
             <FinancialRiskBadge company={company} />
           </div>
           <p className="mt-0.5 line-clamp-1 text-sm text-muted-foreground">{company.oneLiner}</p>
@@ -185,13 +167,14 @@ function CompanyRow({
       <div className="flex items-center gap-6 border-t border-border pt-3 sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
         <div className="text-right">
           <p className="text-xs text-muted-foreground">매출 성장</p>
-          <p className="text-sm font-semibold text-success">+{growth}%</p>
+          <p className={cn("text-sm font-semibold", growth === null ? "text-muted-foreground" : growth >= 0 ? "text-success" : "text-destructive")}>
+            {growth === null ? "자료 부족" : `${growth > 0 ? "+" : ""}${growth}%`}
+          </p>
         </div>
         <div className="text-right">
-          <p className="text-xs text-muted-foreground">누적 투자</p>
-          <p className="text-sm font-semibold text-foreground">{company.fundingTotal}</p>
+          <p className="text-xs text-muted-foreground">누적 지원금</p>
+          <p className="text-sm font-semibold text-foreground">{company.supportTotal}</p>
         </div>
-        {canSelect && <ScorePill score={company.matchScore} />}
         {canSelect && (
           <button
             onClick={onToggle}
@@ -229,38 +212,35 @@ export function CompanyView({
 }) {
   const canSelect = !!program
   const [query, setQuery] = useState("")
-  const [sortKey, setSortKey] = useState<SortKey>("recommended")
+  const [sortKey, setSortKey] = useState<SortKey>("revenue")
   const [industries, setIndustries] = useState<string[]>([])
-  const [stages, setStages] = useState<string[]>([])
   const [locations, setLocations] = useState<string[]>([])
 
   const allIndustries = useMemo(() => [...new Set(companies.map((c) => c.industry))], [])
-  const allStages = useMemo(() => [...new Set(companies.map((c) => c.stage))], [])
   const allLocations = useMemo(() => [...new Set(companies.map((c) => c.location))], [])
-  const filterCount = industries.length + stages.length + locations.length
+  const filterCount = industries.length + locations.length
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
     const filtered = companies.filter((c) => {
       if (industries.length && !industries.includes(c.industry)) return false
-      if (stages.length && !stages.includes(c.stage)) return false
       if (locations.length && !locations.includes(c.location)) return false
       if (q && !`${c.name} ${c.industry} ${c.oneLiner}`.toLowerCase().includes(q)) return false
       return true
     })
     const sorted = [...filtered]
-    if (sortKey === "recommended") sorted.sort((a, b) => b.matchScore - a.matchScore)
-    else if (sortKey === "recommended-asc") sorted.sort((a, b) => a.matchScore - b.matchScore)
-    else if (sortKey === "growth") sorted.sort((a, b) => revenueGrowth(b) - revenueGrowth(a))
+    if (sortKey === "revenue")
+      sorted.sort((a, b) => (b.financials.at(-1)?.revenue ?? -Infinity) - (a.financials.at(-1)?.revenue ?? -Infinity))
+    else if (sortKey === "growth")
+      sorted.sort((a, b) => (revenueGrowth(b) ?? -Infinity) - (revenueGrowth(a) ?? -Infinity))
     else if (sortKey === "employees") sorted.sort((a, b) => b.employees - a.employees)
     else if (sortKey === "financial-risk")
       sorted.sort((a, b) => riskTierOrder[assessFinancialRisk(a).tier] - riskTierOrder[assessFinancialRisk(b).tier])
     return sorted
-  }, [query, sortKey, industries, stages, locations])
+  }, [query, sortKey, industries, locations])
 
   const resetFilters = () => {
     setIndustries([])
-    setStages([])
     setLocations([])
   }
 
@@ -278,7 +258,7 @@ export function CompanyView({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="사업자 등록번호, 기업명 등을 검색해보세요"
+            placeholder="기업명·업종·주요 제품으로 검색해보세요"
             className="w-full bg-transparent text-foreground outline-none placeholder:text-muted-foreground"
           />
         </div>
@@ -288,13 +268,10 @@ export function CompanyView({
         <FilterDropdown
           count={filterCount}
           allIndustries={allIndustries}
-          allStages={allStages}
           allLocations={allLocations}
           industries={industries}
-          stages={stages}
           locations={locations}
           onToggleIndustry={(v) => setIndustries((s) => toggle(s, v))}
-          onToggleStage={(v) => setStages((s) => toggle(s, v))}
           onToggleLocation={(v) => setLocations((s) => toggle(s, v))}
           onReset={resetFilters}
         />
@@ -368,25 +345,19 @@ function SortDropdown({ value, onChange }: { value: SortKey; onChange: (k: SortK
 function FilterDropdown({
   count,
   allIndustries,
-  allStages,
   allLocations,
   industries,
-  stages,
   locations,
   onToggleIndustry,
-  onToggleStage,
   onToggleLocation,
   onReset,
 }: {
   count: number
   allIndustries: string[]
-  allStages: string[]
   allLocations: string[]
   industries: string[]
-  stages: string[]
   locations: string[]
   onToggleIndustry: (v: string) => void
-  onToggleStage: (v: string) => void
   onToggleLocation: (v: string) => void
   onReset: () => void
 }) {
@@ -450,7 +421,6 @@ function FilterDropdown({
             </div>
             <div className="max-h-80 overflow-y-auto py-1">
               {section("업종", allIndustries, industries, onToggleIndustry)}
-              {section("성장 단계", allStages, stages, onToggleStage)}
               {section("지역", allLocations, locations, onToggleLocation)}
             </div>
           </div>

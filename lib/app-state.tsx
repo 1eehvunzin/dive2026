@@ -23,7 +23,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [activeId, setActiveId] = useState<string | null>(null)
 
   const activeRecord = useMemo(() => records.find((r) => r.program.id === activeId) ?? null, [records, activeId])
-  const shortlist = activeRecord?.shortlist ?? []
+  const shortlist = useMemo(() => activeRecord?.shortlist ?? [], [activeRecord])
   const totalShortlistCount = useMemo(() => records.reduce((s, r) => s + r.shortlist.length, 0), [records])
   const programList = useMemo(() => records.map((r) => ({ id: r.program.id, title: r.program.title })), [records])
 
