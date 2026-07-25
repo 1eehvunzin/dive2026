@@ -1,9 +1,14 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { Inter } from 'next/font/google'
+import { Inter, IBM_Plex_Sans_KR } from 'next/font/google'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
+const plexKr = IBM_Plex_Sans_KR({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  variable: '--font-plex-kr',
+})
 
 export const metadata: Metadata = {
   title: '기업선정 인텔리전스 | 공공지원사업 매칭 플랫폼',
@@ -42,7 +47,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="ko" className={`bg-background ${inter.variable}`}>
+    <html lang="ko" className={`bg-background ${inter.variable} ${plexKr.variable}`}>
       <body className="antialiased font-sans">
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
