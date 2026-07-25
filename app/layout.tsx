@@ -1,10 +1,18 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
+import { Inter, IBM_Plex_Sans_KR } from 'next/font/google'
 import './globals.css'
+
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
+const plexKr = IBM_Plex_Sans_KR({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  variable: '--font-plex-kr',
+})
 
 export const metadata: Metadata = {
   title: '기업선정 인텔리전스 | 공공지원사업 매칭 플랫폼',
-  description: '지원사업 요건과 기업 데이터를 근거로 후보 비교와 실사를 지원하는 공공기관용 인텔리전스 플랫폼',
+  description: '지원사업을 등록하고 AI 기반 추천 순위로 대상 기업을 선정하는 공공기관용 인텔리전스 플랫폼',
   generator: 'v0.app',
   icons: {
     icon: [
@@ -39,7 +47,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="ko" className="bg-background">
+    <html lang="ko" className={`bg-background ${inter.variable} ${plexKr.variable}`}>
       <body className="antialiased font-sans">
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
