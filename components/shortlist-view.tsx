@@ -2,21 +2,23 @@
 
 import { CheckSquare, Building2, MapPin, Users, X, ArrowUpRight, Coins } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { companies, programs, type Company } from "@/lib/mock-data"
+import { companies, type Company, type Program } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
 
 export function ShortlistView({
+  program,
   shortlist,
   onSelectCompany,
   onToggleShortlist,
   onBrowse,
 }: {
+  program: Program
   shortlist: string[]
   onSelectCompany: (c: Company) => void
   onToggleShortlist: (id: string) => void
   onBrowse: () => void
 }) {
-  const p = programs[0]
+  const p = program
   const picked = companies
     .filter((c) => shortlist.includes(c.id))
     .sort((a, b) => b.matchScore - a.matchScore)

@@ -1,25 +1,38 @@
 "use client"
 
-import { FileText, Building2, CheckSquare, Settings, Landmark } from "lucide-react"
+import { useState } from "react"
+import { Building2, CheckSquare, Clock, Settings, Landmark, Plus, ChevronsUpDown, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-export type ViewId = "programs" | "companies" | "shortlist"
+export type ViewId = "companies" | "shortlist" | "history"
 
-const nav: { id: ViewId; label: string; icon: typeof FileText }[] = [
-  { id: "programs", label: "지원사업 등록", icon: FileText },
+const nav: { id: ViewId; label: string; icon: typeof Building2 }[] = [
   { id: "companies", label: "추천 기업", icon: Building2 },
   { id: "shortlist", label: "선정 목록", icon: CheckSquare },
+  { id: "history", label: "활동 히스토리", icon: Clock },
 ]
 
 export function Sidebar({
   active = "companies",
   onNavigate,
   shortlistCount = 0,
+  programs = [],
+  activeId = null,
+  onSwitchProgram,
+  onNewProgram,
 }: {
   active?: ViewId
   onNavigate?: (id: ViewId) => void
   shortlistCount?: number
+  programs?: { id: string; title: string }[]
+  activeId?: string | null
+  onSwitchProgram?: (id: string) => void
+  onNewProgram?: () => void
 }) {
+  const [open, setOpen] = useState(false)
+  const activeProgram = programs.find((p) => p.id === activeId)
+  const hasProgram = programs.length > 0
+
   return (
     <aside className="hidden w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:flex">
       <div className="flex items-center gap-2.5 px-5 py-5">
@@ -32,17 +45,75 @@ export function Sidebar({
         </div>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1 px-3 py-2">
+      {/* Program switcher */}
+      <div className="relative px-3 pb-2">
+        <p className="px-2 pb-1.5 text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/40">
+          지원사업 공고
+        </p>
+        <button
+          onClick={() => hasProgram && setOpen((o) => !o)}
+          className={cn(
+            "flex w-full items-center gap-2 rounded-lg border border-sidebar-border bg-sidebar-accent/40 px-3 py-2.5 text-left transition-colors",
+            hasProgram && "hover:bg-sidebar-accent",
+          )}
+        >
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-sidebar-foreground">
+              {activeProgram ? activeProgram.title : "등록된 공고 없음"}
+            </p>
+            <p className="text-[11px] text-sidebar-foreground/50">
+              {hasProgram ? `${programs.length}개 공고 관리 중` : "새 공고를 등록하세요"}
+            </p>
+          </div>
+          {hasProgram && <ChevronsUpDown className="h-4 w-4 shrink-0 text-sidebar-foreground/50" />}
+        </button>
+
+        {open && hasProgram && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+            <div className="absolute left-3 right-3 z-20 mt-1 overflow-hidden rounded-lg border border-sidebar-border bg-sidebar shadow-xl">
+              {programs.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => {
+                    onSwitchProgram?.(p.id)
+                    setOpen(false)
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-sidebar-foreground/85 transition-colors hover:bg-sidebar-accent"
+                >
+                  <span className="min-w-0 flex-1 truncate">{p.title}</span>
+                  {p.id === activeId && <Check className="h-4 w-4 shrink-0 text-sidebar-primary" />}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        <button
+          onClick={() => {
+            setOpen(false)
+            onNewProgram?.()
+          }}
+          className="mt-1.5 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        >
+          <Plus className="h-4 w-4" />새 공고 등록
+        </button>
+      </div>
+
+      <nav className="mt-2 flex flex-1 flex-col gap-1 border-t border-sidebar-border/60 px-3 py-3">
         {nav.map((item) => {
           const Icon = item.icon
           const isActive = item.id === active
+          const disabled = !hasProgram
           return (
             <button
               key={item.id}
               onClick={() => onNavigate?.(item.id)}
               aria-current={isActive ? "page" : undefined}
+              disabled={disabled}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
+                disabled && "cursor-not-allowed opacity-40",
                 isActive
                   ? "bg-sidebar-primary text-sidebar-primary-foreground"
                   : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",

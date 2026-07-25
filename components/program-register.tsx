@@ -22,12 +22,18 @@ type Stage = "upload" | "analyzing" | "review"
 
 const analyzeSteps = ["문서 파싱 중", "핵심 항목 추출 중", "평가 키워드 도출 중", "기업 풀 매칭 준비 중"]
 
-export function ProgramRegister({ onComplete }: { onComplete: (p: Program) => void }) {
-  const [stage, setStage] = useState<Stage>("upload")
+export function ProgramRegister({
+  onComplete,
+  initial = null,
+}: {
+  onComplete: (p: Program) => void
+  initial?: Program | null
+}) {
+  const [stage, setStage] = useState<Stage>(initial ? "review" : "upload")
   const [fileName, setFileName] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [stepIdx, setStepIdx] = useState(0)
-  const [draft, setDraft] = useState<Program>(programs[0])
+  const [draft, setDraft] = useState<Program>(initial ?? programs[0])
   const inputRef = useRef<HTMLInputElement>(null)
 
   const runAnalysis = useCallback((name: string) => {
@@ -64,14 +70,15 @@ export function ProgramRegister({ onComplete }: { onComplete: (p: Program) => vo
       <div className="mb-8">
         <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
           <Sparkles className="h-3.5 w-3.5" />
-          간편 등록
+          {initial ? "공고 수정" : "간편 등록"}
         </div>
         <h1 className="mt-3 text-2xl font-semibold text-balance text-foreground">
-          지원사업 공고문 PDF만 올리면 자동으로 등록됩니다
+          {initial ? "지원사업 공고 정보를 수정합니다" : "지원사업 공고문 PDF만 올리면 자동으로 등록됩니다"}
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          공고문 PDF를 업로드하면 AI가 사업명·분야·지원 규모·평가 키워드를 자동으로 추출합니다. 추출 결과를 확인하고
-          등록하면 기업 풀에서 추천 순위가 계산됩니다.
+          {initial
+            ? "추출된 항목을 수정한 뒤 저장하면 추천 순위가 다시 계산됩니다."
+            : "공고문 PDF를 업로드하면 AI가 사업명·분야·지원 규모·평가 키워드를 자동으로 추출합니다. 추출 결과를 확인하고 등록하면 기업 풀에서 추천 순위가 계산됩니다."}
         </p>
       </div>
 
@@ -249,10 +256,10 @@ export function ProgramRegister({ onComplete }: { onComplete: (p: Program) => vo
               <RotateCcw className="h-3.5 w-3.5" />
               다른 파일 올리기
             </Button>
-            <Button className="gap-1.5" onClick={() => onComplete(draft)}>
-              <Sparkles className="h-4 w-4" />
-              등록하고 기업 추천 받기
-            </Button>
+                <Button className="gap-1.5" onClick={() => onComplete(draft)}>
+                  <Sparkles className="h-4 w-4" />
+                  {initial ? "수정 내용 저장" : "등록하고 기업 추천 받기"}
+                </Button>
           </div>
         </div>
       )}
