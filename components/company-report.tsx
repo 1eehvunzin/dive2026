@@ -15,7 +15,7 @@ import {
   Square,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { ScoreRing, TrendBars } from "@/components/charts"
+import { ScoreRing, TrendBars, MultiAreaLine, RadarChart, PercentileStrip, SupportDots, BenchmarkBars } from "@/components/charts"
 import { InvestmentSim } from "@/components/investment-sim"
 import { FinancialRiskBadge } from "@/components/financial-risk-badge"
 import { type Company } from "@/lib/mock-data"
@@ -243,6 +243,12 @@ function OverviewTab({ company }: { company: Company }) {
           </ul>
         </div>
       </div>
+      {company.supportHistory && company.supportHistory.length > 0 && (
+        <div className="rounded-xl border border-border bg-card p-6">
+          <h3 className="mb-3 font-semibold text-foreground">공공 지원 이력</h3>
+          <SupportDots events={company.supportHistory} />
+        </div>
+      )}
       <ReportBlock title="시장 분석">{company.report.market}</ReportBlock>
       <ReportBlock title="기술 경쟁력">{company.report.technology}</ReportBlock>
       <ReportBlock title="팀 · 조직">{company.report.team}</ReportBlock>
@@ -292,16 +298,52 @@ function FinancialsTab({ company }: { company: Company }) {
         )}
       </div>
 
+      {/* Combined line chart: revenue + op profit */}
+      <div className="rounded-xl border border-border bg-card p-6">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="font-semibold text-foreground">매출 · 영업이익 추이</h3>
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-0.5 w-4 rounded" style={{ backgroundColor: "var(--chart-1)" }} />
+              매출 (억 원)
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-0.5 w-4 rounded" style={{ backgroundColor: "var(--chart-3)" }} />
+              영업이익 (억 원)
+            </span>
+          </div>
+        </div>
+        <MultiAreaLine
+          xLabels={company.financials.map((f) => f.year)}
+          series={[
+            {
+              label: "매출",
+              values: company.financials.map((f) => f.revenue),
+              colorVar: "--chart-1",
+              fill: true,
+            },
+            {
+              label: "영업이익",
+              values: company.financials.map((f) => f.operatingProfit),
+              colorVar: "--chart-3",
+              fill: false,
+            },
+          ]}
+          unit="억원"
+        />
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-xl border border-border bg-card p-6">
           <h3 className="mb-4 font-semibold text-foreground">매출 추이 (억 원)</h3>
           <TrendBars data={company.financials.map((f) => ({ label: f.year, value: f.revenue }))} colorVar="--chart-1" />
         </div>
         <div className="rounded-xl border border-border bg-card p-6">
-          <h3 className="mb-4 font-semibold text-foreground">영업이익 추이 (억 원)</h3>
-          <TrendBars data={company.financials.map((f) => ({ label: f.year, value: f.operatingProfit }))} colorVar="--chart-3" />
+          <h3 className="mb-4 font-semibold text-foreground">임직원 수 추이</h3>
+          <TrendBars data={company.financials.map((f) => ({ label: f.year, value: f.employees }))} colorVar="--chart-2" />
         </div>
       </div>
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           { label: "2025 매출", value: `${last.revenue}억` },
@@ -315,6 +357,21 @@ function FinancialsTab({ company }: { company: Company }) {
           </div>
         ))}
       </div>
+
+      {company.industryBenchmarks && company.industryBenchmarks.length > 0 && (
+        <div className="rounded-xl border border-border bg-card p-6">
+          <h3 className="mb-4 font-semibold text-foreground">업종 평균 대비 비교</h3>
+          <BenchmarkBars items={company.industryBenchmarks} />
+        </div>
+      )}
+
+      {company.survivalPercentiles && company.survivalPercentiles.length > 0 && (
+        <div className="rounded-xl border border-border bg-card p-6">
+          <h3 className="mb-4 font-semibold text-foreground">동종 업종 내 분위 위치</h3>
+          <PercentileStrip items={company.survivalPercentiles} />
+        </div>
+      )}
+
       <ReportBlock title="재무 분석 의견">{company.report.finance}</ReportBlock>
     </div>
   )
@@ -325,23 +382,32 @@ function EvaluationTab({ company }: { company: Company }) {
     <div className="space-y-4">
       <div className="rounded-xl border border-border bg-card p-6">
         <h3 className="mb-4 font-semibold text-foreground">평가 항목별 점수</h3>
-        <div className="space-y-4">
-          {company.scoreBreakdown.map((s) => (
-            <div key={s.label}>
-              <div className="mb-1.5 flex items-center justify-between text-sm">
-                <span className="text-foreground">
-                  {s.label} <span className="text-xs text-muted-foreground">· 가중치 {s.weight}%</span>
-                </span>
-                <span className="font-semibold tabular-nums text-foreground">{s.score}</span>
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
+          <div className="shrink-0">
+            <RadarChart
+              axes={company.scoreBreakdown.map((s) => ({ label: s.label, value: s.score }))}
+              size={220}
+              colorVar="--chart-1"
+            />
+          </div>
+          <div className="flex-1 space-y-4">
+            {company.scoreBreakdown.map((s) => (
+              <div key={s.label}>
+                <div className="mb-1.5 flex items-center justify-between text-sm">
+                  <span className="text-foreground">
+                    {s.label} <span className="text-xs text-muted-foreground">· 가중치 {s.weight}%</span>
+                  </span>
+                  <span className="font-semibold tabular-nums text-foreground">{s.score}</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-secondary">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all"
+                    style={{ width: `${s.score}%` }}
+                  />
+                </div>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-secondary">
-                <div
-                  className="h-full rounded-full bg-primary transition-all"
-                  style={{ width: `${s.score}%` }}
-                />
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
       <div className="rounded-xl border border-border bg-card p-6">

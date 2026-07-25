@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:server": "pnpm --filter server dev",
+    "dev:all": "concurrently \"pnpm dev\" \"pnpm dev:server\"",
     "build": "next build",
     "start": "next start",
     "lint": "eslint ."

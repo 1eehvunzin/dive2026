@@ -57,12 +57,6 @@ export type Company = {
     team: string
     finance: string
   }
-  /** 동종 업종 내 백분위 (선택적 — 백엔드 리포트 API 연동 후 채워짐) */
-  survivalPercentiles?: { label: string; pctl: number; cohortLabel?: string }[]
-  /** 지원 이력 타임라인 (선택적) */
-  supportHistory?: { year: number; program: string; amount: number }[]
-  /** 업종 평균 대비 벤치마크 (선택적) */
-  industryBenchmarks?: { label: string; company: number; industry: number; unit: string }[]
 }
 
 export const programs: Program[] = [
@@ -137,23 +131,6 @@ export const companies: Company[] = [
       finance:
         "2025년 매출 142억 원, 영업이익 21억 원으로 흑자 전환에 성공했다. 순현금 흐름이 개선되고 있으며, 현재 런웨이는 약 28개월로 추정된다. 매출총이익률은 78% 수준으로 SaaS 업계 상위권이다.",
     },
-    survivalPercentiles: [
-      { label: "매출 규모", pctl: 72, cohortLabel: "소프트웨어개발 소기업 (n=214)" },
-      { label: "고용 증가율", pctl: 85, cohortLabel: "소프트웨어개발 소기업 (n=214)" },
-      { label: "영업이익률", pctl: 68, cohortLabel: "소프트웨어개발 소기업 (n=214)" },
-      { label: "특허 보유", pctl: 79, cohortLabel: "소프트웨어개발 소기업 (n=214)" },
-    ],
-    supportHistory: [
-      { year: 2022, program: "TIPS R&D", amount: 5000 },
-      { year: 2023, program: "혁신바우처", amount: 2000 },
-      { year: 2024, program: "수출바우처", amount: 3000 },
-    ],
-    industryBenchmarks: [
-      { label: "영업이익률 (%)", company: 14.8, industry: 6.2, unit: "%" },
-      { label: "매출성장률 (%)", company: 82, industry: 18, unit: "%" },
-      { label: "직원 1인당 매출 (억)", company: 2.96, industry: 1.74, unit: "억원/인" },
-      { label: "R&D 집약도 (%)", company: 12.3, industry: 5.8, unit: "%" },
-    ],
   },
   {
     id: "co-verdant",
@@ -381,16 +358,3 @@ export const companies: Company[] = [
   },
 ]
 
-export type ChatMessage = {
-  role: "user" | "assistant"
-  content: string
-  sources?: { title: string; snippet: string }[]
-  context?: string
-}
-
-export type ProgramRecord = {
-  program: Program
-  shortlist: string[]
-}
-
-export type ViewId = "companies" | "shortlist"

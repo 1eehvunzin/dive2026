@@ -13,3 +13,7 @@ __v0_jsx-dev-runtime.ts
 node_modules
 .next/
 .DS_Store
+# DIVE2026 backend
+server/.env
+server/dive2026.db
+server/dist/
