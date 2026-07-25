@@ -22,7 +22,7 @@ export function NavTabs({
   shortlistCount?: number
 }) {
   return (
-    <nav className="flex items-center gap-0.5 rounded-xl bg-primary-foreground/10 p-1" aria-label="주요 화면">
+    <nav className="flex items-center gap-1" aria-label="주요 화면">
       {tabs.map((tab) => {
         const Icon = tab.icon
         const disabled = tab.needsProgram && !hasProgram
@@ -34,12 +34,12 @@ export function NavTabs({
             disabled={disabled}
             aria-current={isActive ? "page" : undefined}
             className={cn(
-              "relative flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors",
+              "relative flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors",
               disabled
-                ? "cursor-not-allowed text-primary-foreground/40"
+                ? "cursor-not-allowed text-sidebar-foreground/35"
                 : isActive
-                  ? "bg-primary-foreground text-primary shadow-sm"
-                  : "text-primary-foreground/80 hover:bg-primary-foreground/10 hover:text-primary-foreground",
+                  ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
+                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
             )}
           >
             <Icon className="h-4 w-4" />
@@ -48,7 +48,9 @@ export function NavTabs({
               <span
                 className={cn(
                   "rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
-                  isActive ? "bg-primary/15 text-primary" : "bg-primary-foreground/20 text-primary-foreground",
+                  isActive
+                    ? "bg-sidebar-primary-foreground/20 text-sidebar-primary-foreground"
+                    : "bg-sidebar-primary/25 text-sidebar-foreground",
                 )}
               >
                 {shortlistCount}

@@ -179,23 +179,23 @@ export default function Page() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      {/* Top bar spanning full width: brand block + primary nav bar */}
-      <header className="sticky top-0 z-40 flex h-16 shrink-0 shadow-sm">
+      {/* Unified top bar: brand block + primary nav, single deep-navy shell */}
+      <header className="sticky top-0 z-40 flex h-16 shrink-0 border-b border-sidebar-border/60 bg-sidebar text-sidebar-foreground">
         {/* Brand block, aligned to sidebar width */}
-        <div className="hidden w-64 shrink-0 items-center gap-3 bg-sidebar px-5 text-sidebar-foreground lg:flex">
+        <div className="hidden w-64 shrink-0 items-center gap-3 border-r border-sidebar-border/60 px-5 lg:flex">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
             <Landmark className="h-5 w-5" />
           </div>
           <div className="min-w-0 leading-tight">
             <p className="truncate text-sm font-semibold">기업선정 인텔리전스</p>
-            <p className="truncate text-xs text-sidebar-foreground/60">공공지원사업 매칭</p>
+            <p className="truncate text-xs text-sidebar-foreground/55">공공지원사업 매칭</p>
           </div>
         </div>
 
-        {/* Primary nav bar */}
-        <div className="flex flex-1 items-center justify-between bg-primary pl-3 pr-3 text-primary-foreground sm:pl-4 sm:pr-5">
+        {/* Primary nav */}
+        <div className="flex flex-1 items-center justify-between pl-3 pr-3 sm:pl-4 sm:pr-5">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-foreground/15 lg:hidden">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-accent text-sidebar-foreground lg:hidden">
               <Landmark className="h-4.5 w-4.5" />
             </div>
             <NavTabs
@@ -209,29 +209,29 @@ export default function Page() {
           <div className="flex items-center gap-1">
             <button
               aria-label="도움말"
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-primary-foreground/75 transition-colors hover:bg-primary-foreground/10 hover:text-primary-foreground"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
             >
               <HelpCircle className="h-4.5 w-4.5" />
             </button>
             <button
               aria-label="알림"
-              className="relative flex h-9 w-9 items-center justify-center rounded-lg text-primary-foreground/75 transition-colors hover:bg-primary-foreground/10 hover:text-primary-foreground"
+              className="relative flex h-9 w-9 items-center justify-center rounded-lg text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
             >
               <Bell className="h-4.5 w-4.5" />
-              <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-warning ring-2 ring-primary" />
+              <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-warning ring-2 ring-sidebar" />
             </button>
 
             {/* Divider */}
-            <span className="mx-1.5 hidden h-6 w-px bg-primary-foreground/20 sm:block" />
+            <span className="mx-1.5 hidden h-6 w-px bg-sidebar-border/70 sm:block" />
 
             {/* Account */}
-            <button className="flex items-center gap-2.5 rounded-lg py-1 pl-1 pr-2 transition-colors hover:bg-primary-foreground/10">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-foreground/20 text-xs font-semibold">
+            <button className="flex items-center gap-2.5 rounded-lg py-1 pl-1 pr-2 transition-colors hover:bg-sidebar-accent">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-sidebar-primary/25 text-xs font-semibold text-sidebar-foreground">
                 산진
               </span>
               <span className="hidden text-left leading-tight md:block">
                 <span className="block text-sm font-medium">산업진흥원</span>
-                <span className="block text-xs text-primary-foreground/65">기업지원팀</span>
+                <span className="block text-xs text-sidebar-foreground/60">기업지원팀</span>
               </span>
             </button>
           </div>
