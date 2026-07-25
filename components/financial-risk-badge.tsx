@@ -7,7 +7,7 @@ const tierIcon: Record<RiskTier, typeof ShieldCheck> = {
   안정: ShieldCheck,
   주의: ShieldAlert,
   위험: ShieldX,
-  정보부족: CircleHelp,
+  미산정: CircleHelp,
 }
 
 export function FinancialRiskBadge({ company, className }: { company: Company; className?: string }) {

@@ -3,51 +3,42 @@
 import { useEffect, useRef, useState } from "react"
 import { Sparkles, X, Send, FileSearch, Quote, Loader2, ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { chatAgent } from "@/lib/api"
 import { type Company, type ChatMessage } from "@/lib/mock-data"
-import { assessFinancialRisk } from "@/lib/risk"
 import { cn } from "@/lib/utils"
 
-function buildAnswer(company: Company, question: string, context?: string): ChatMessage {
-  const q = question.toLowerCase()
-  let content = ""
-  const sources: { title: string; snippet: string }[] = []
-  const latest = company.financials.at(-1)
+function evidenceLabel(evidenceId: string): string {
+  if (evidenceId.startsWith("btp_support:")) return "부산TP 사업 선정 이력"
+  if (evidenceId.startsWith("ntis:")) return "NTIS 국가R&D 과제"
+  if (evidenceId.includes("patent")) return "KODATA 특허 현황"
+  if (evidenceId.includes("researcher") || evidenceId.includes("rd_")) return "KODATA 연구개발 역량"
+  if (evidenceId.includes("employment")) return "KODATA 고용 현황"
+  if (evidenceId.includes("revenue") || evidenceId.includes("margin")) return "KODATA 손익·매출"
+  if (evidenceId.includes("debt") || evidenceId.includes("equity")) return "KODATA 재무상태"
+  return "기업 실사 원천데이터"
+}
 
-  if (q.includes("리스크") || q.includes("위험") || context?.includes("리스크")) {
-    const risk = assessFinancialRisk(company)
-    const observed = [...company.risks, ...risk.signals]
-    content = `${company.name}에서 현재 데이터로 확인되는 위험·검토 신호입니다.\n\n${observed.map((item, index) => `${index + 1}) ${item}`).join("\n") || "현재 데이터에서 규칙 임계치를 넘은 신호는 확인되지 않았습니다."}\n\n${risk.unavailable.length > 0 ? `${risk.unavailable.join("·")}은 원천 필드가 없어 판단에서 제외했습니다. 결측을 안전으로 해석하면 안 됩니다.` : "이 결과는 확인된 필드만 사용한 1차 검토이며 생존 가능성을 보장하지 않습니다."}`
-    sources.push(
-      { title: "기업 리포트 · 리스크 분석", snippet: company.risks[0] },
-      { title: `재무 데이터 · ${latest?.year ?? "기준연도 미상"}`, snippet: company.report.finance.slice(0, 60) + "..." },
-    )
-  } else if (q.includes("매출") || q.includes("재무") || q.includes("성장")) {
-    const revenue = latest?.revenue === null || latest?.revenue === undefined ? "자료 없음" : `${latest.revenue}${company.financialUnit}`
-    const profit = latest?.operatingProfit === null || latest?.operatingProfit === undefined ? "자료 없음" : `${latest.operatingProfit}${company.financialUnit}`
-    content = `${company.name}의 최신 수록 재무연도는 ${latest?.year ?? "확인 불가"}년이며, 매출은 ${revenue}, 영업이익은 ${profit}입니다.\n\n${company.report.finance}\n\n이 수치만으로 사업화 가능성이나 지원 효과를 단정하지 않습니다.`
-    sources.push(
-      { title: "재무제표 · 수록 연도", snippet: `매출 ${company.financials.map((f) => f.revenue ?? "결측").join(" → ")} ${company.financialUnit}` },
-      { title: "기업 리포트 · 재무 분석", snippet: company.report.finance.slice(0, 70) + "..." },
-    )
-  } else if (q.includes("기술") || q.includes("특허") || context?.includes("기술")) {
-    content = `${company.name}의 데이터에 등록 특허 ${company.patents}건과 인증 ${company.certifications.length}건이 수록되어 있습니다.\n\n${company.report.technology}\n\n특허·인증 건수는 기술의 품질이나 공고 적합성을 직접 증명하지 않으므로 원문과 유효상태 확인이 필요합니다.`
-    sources.push(
-      { title: "기업 리포트 · 기술 분석", snippet: company.report.technology.slice(0, 70) + "..." },
-      { title: "특허 등록 현황", snippet: `등록 특허 ${company.patents}건 · 핵심 공정 보호` },
-    )
-  } else if (q.includes("시장") || q.includes("전망")) {
-    content = `${company.report.market}\n\n위 서술은 현재 리포트에 수록된 내용입니다. 출처·기준연도가 연결되기 전에는 시장규모나 성장 전망을 확정 사실로 사용하지 마세요.`
-    sources.push({ title: "기업 리포트 · 시장 분석", snippet: company.report.market.slice(0, 70) + "..." })
-  } else {
-    const highest = [...company.scoreBreakdown].sort((a, b) => b.score - a.score)[0]
-    content = `현재 리포트에 수록된 요약입니다.\n\n${company.report.summary}\n\n${highest ? `화면의 공고 평가 예시 중 가장 높은 항목은 '${highest.label}'이지만, 공고 원문 근거가 연결되기 전에는 선정 점수로 사용하지 않습니다.` : "공고 평가항목은 아직 연결되지 않았습니다."} 재무·기술·리스크처럼 확인할 범위를 지정해 질문해 주세요.`
-    sources.push(
-      { title: "기업 리포트 · 종합 요약", snippet: company.report.summary.slice(0, 70) + "..." },
-      { title: "평가 점수 산정 내역", snippet: company.scoreBreakdown.map((s) => `${s.label} ${s.score}`).join(" · ") },
-    )
-  }
-
-  return { role: "assistant", content, sources, context }
+function AgentAnswer({ content }: { content: string }) {
+  return (
+    <div className="space-y-2.5">
+      {content.split(/\n/).filter((line) => line.trim()).map((line, index) => {
+        const text = line.trim().replace(/\s{2,}$/g, "")
+        if (/^[①②③④⑤]/.test(text)) {
+          return <p key={index} className="pt-1 text-sm font-semibold text-foreground">{text}</p>
+        }
+        if (/^[-•]\s*/.test(text)) {
+          return (
+            <div key={index} className="flex items-start gap-2 text-sm leading-relaxed text-foreground/90">
+              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70" />
+              <p>{text.replace(/^[-•]\s*/, "")}</p>
+            </div>
+          )
+        }
+        if (/^(kodata|btp_support|ntis|ntis_summary):/i.test(text)) return null
+        return <p key={index} className="text-sm leading-relaxed text-foreground/90">{text}</p>
+      })}
+    </div>
+  )
 }
 
 export function AgentPanel({
@@ -84,19 +75,55 @@ export function AgentPanel({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
   }, [messages, thinking])
 
-  const send = () => {
+  const send = async () => {
     const text = input.trim()
-    if (!text) return
+    if (!text || thinking) return
+    const companyId = Number.parseInt(String(company.id), 10)
     const userMsg: ChatMessage = { role: "user", content: text, context: context ?? undefined }
     setMessages((m) => [...m, userMsg])
     setInput("")
     const usedContext = context
     setContext(null)
     setThinking(true)
-    setTimeout(() => {
-      setMessages((m) => [...m, buildAnswer(company, text, usedContext ?? undefined)])
+    try {
+      if (!Number.isFinite(companyId)) {
+        throw new Error("이 기업은 백엔드 기업 ID가 없어 에이전트 분석을 요청할 수 없습니다.")
+      }
+      const result = await chatAgent({
+        companyId,
+        question: usedContext
+          ? `리포트에서 선택한 문장: ${usedContext}\n담당자 질문: ${text}`
+          : text,
+        roundId: company.dueDiligence?.roundId ?? undefined,
+      })
+      setMessages((m) => [
+        ...m,
+        {
+          role: "assistant",
+          content: result.fallback
+            ? `${result.answer}\n\n현재 Solar API를 사용할 수 없어 백엔드의 규칙 기반 응답을 표시했습니다.`
+            : result.answer,
+          context: usedContext ?? undefined,
+          sources: result.sources.map((evidenceId) => ({
+            title: evidenceLabel(evidenceId),
+            snippet: evidenceId,
+          })),
+        },
+      ])
+    } catch (cause) {
+      setMessages((m) => [
+        ...m,
+        {
+          role: "assistant",
+          content: cause instanceof Error
+            ? `응답을 불러오지 못했습니다: ${cause.message}`
+            : "응답을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.",
+          context: usedContext ?? undefined,
+        },
+      ])
+    } finally {
       setThinking(false)
-    }, 900)
+    }
   }
 
   const suggestions = ["이 기업의 핵심 리스크는?", "매출 성장세를 평가해줘", "기술 경쟁력은 어때?"]
@@ -163,20 +190,26 @@ export function AgentPanel({
                       : "border border-border bg-secondary/50 text-foreground",
                   )}
                 >
-                  <p className="whitespace-pre-wrap">{m.content}</p>
+                  {m.role === "assistant"
+                    ? <AgentAnswer content={m.content} />
+                    : <p className="whitespace-pre-wrap">{m.content}</p>}
                 </div>
                 {m.sources && m.sources.length > 0 && (
-                  <div className="mt-2 space-y-1.5">
-                    <p className="text-xs font-medium text-muted-foreground">참고 문서 {m.sources.length}건</p>
-                    {m.sources.map((s, si) => (
-                      <div key={si} className="rounded-lg border border-border bg-background px-3 py-2">
-                        <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-                          <FileSearch className="h-3 w-3 text-primary" />
-                          {s.title}
-                        </p>
-                        <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{s.snippet}</p>
-                      </div>
-                    ))}
+                  <div className="mt-2 rounded-lg border border-border bg-background px-3 py-2.5">
+                    <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                      <FileSearch className="h-3 w-3 text-primary" />
+                      답변에 사용한 원천데이터
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {[...m.sources.reduce((groups, source) => {
+                        groups.set(source.title, (groups.get(source.title) ?? 0) + 1)
+                        return groups
+                      }, new Map<string, number>())].map(([title, count]) => (
+                        <span key={title} className="rounded-md bg-secondary px-2 py-1 text-[11px] text-muted-foreground">
+                          {title} {count}개 필드
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -221,14 +254,14 @@ export function AgentPanel({
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
                   e.preventDefault()
-                  send()
+                void send()
                 }
               }}
               rows={1}
               placeholder="선택한 내용에 대해 질문하기..."
               className="max-h-28 flex-1 resize-none rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/20"
             />
-            <Button size="icon" onClick={send} disabled={!input.trim()} className="h-10 w-10 shrink-0">
+            <Button size="icon" onClick={() => void send()} disabled={!input.trim() || thinking} className="h-10 w-10 shrink-0">
               <Send className="h-4 w-4" />
             </Button>
           </div>

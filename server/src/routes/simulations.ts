@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db/connection';
+import { parsePositiveInteger, sendApiError } from '../lib/http';
 
 const router = Router();
 
@@ -19,37 +20,55 @@ function median(values: number[]): number | null {
 }
 
 router.post('/', (req: Request, res: Response) => {
-  const companyId = Number.parseInt(String(req.body?.companyId ?? ''), 10);
+  const companyId = parsePositiveInteger(req.body?.companyId);
   const amountMillion = Number(req.body?.amountMillion);
-  if (!Number.isFinite(companyId)) return res.status(400).json({ error: 'valid companyId is required' });
+  if (!companyId) return sendApiError(res, 400, 'INVALID_COMPANY_ID', 'companyId must be a positive integer');
   if (!Number.isFinite(amountMillion) || amountMillion < 0) {
-    return res.status(400).json({ error: 'amountMillion must be a non-negative number' });
+    return sendApiError(
+      res,
+      400,
+      'INVALID_SUPPORT_AMOUNT',
+      'amountMillion must be a non-negative number',
+    );
   }
   const company = getDb().prepare('SELECT * FROM company_master WHERE company_id = ?').get(companyId) as {
     ksic3: string | null;
     size: string | null;
   } | undefined;
-  if (!company) return res.status(404).json({ error: 'Company not found' });
+  if (!company) return sendApiError(res, 404, 'COMPANY_NOT_FOUND', 'Company not found');
 
-  const observations = getDb().prepare(`
-    WITH first_support AS (
-      SELECT company_id, MIN(as_of_fy) AS before_fy
-      FROM support_episode
-      WHERE as_of_fy IS NOT NULL
-      GROUP BY company_id
-    )
-    SELECT
-      m.company_id,
-      y0.revenue AS before_revenue,
-      y1.revenue AS after_revenue,
-      COALESCE(y0.pension_enrolled, y0.employees) AS before_employees,
-      COALESCE(y1.pension_enrolled, y1.employees) AS after_employees
-    FROM company_master m
-    JOIN first_support f ON f.company_id = m.company_id
-    LEFT JOIN company_yearly y0 ON y0.company_id = m.company_id AND y0.fiscal_year = f.before_fy
-    LEFT JOIN company_yearly y1 ON y1.company_id = m.company_id AND y1.fiscal_year = f.before_fy + 1
-    WHERE m.ksic3 = ? AND m.size = ?
-  `).all(company.ksic3, company.size) as Observation[];
+  let observations: Observation[];
+  try {
+    observations = getDb().prepare(`
+      WITH first_support AS (
+        SELECT
+          company_id,
+          MIN(
+            CASE
+              WHEN selected_date IS NOT NULL
+                THEN CAST(substr(selected_date, 1, 4) AS INTEGER)
+              ELSE source_year
+            END
+          ) AS before_fy
+        FROM support_episode
+        WHERE selected_date IS NOT NULL OR source_year IS NOT NULL
+        GROUP BY company_id
+      )
+      SELECT
+        m.company_id,
+        y0.revenue AS before_revenue,
+        y1.revenue AS after_revenue,
+        COALESCE(y0.pension_enrolled, y0.employees) AS before_employees,
+        COALESCE(y1.pension_enrolled, y1.employees) AS after_employees
+      FROM company_master m
+      JOIN first_support f ON f.company_id = m.company_id
+      LEFT JOIN company_yearly y0 ON y0.company_id = m.company_id AND y0.fiscal_year = f.before_fy
+      LEFT JOIN company_yearly y1 ON y1.company_id = m.company_id AND y1.fiscal_year = f.before_fy + 1
+      WHERE m.ksic3 = ? AND m.size = ?
+    `).all(company.ksic3, company.size) as Observation[];
+  } catch {
+    return sendApiError(res, 500, 'SIMULATION_FAILED', 'Unable to build the observational scenario');
+  }
 
   const revenueChanges = observations
     .filter(row => row.before_revenue !== null && row.before_revenue > 0 && row.after_revenue !== null)

@@ -32,6 +32,8 @@ const roundsRouter = require('../routes/rounds').default as import('express').Ro
 const comparisonsRouter = require('../routes/comparisons').default as import('express').Router;
 const simulationsRouter = require('../routes/simulations').default as import('express').Router;
 const { normalizeExtracted } = require('../routes/upload') as typeof import('../routes/upload');
+const { validateProgram } = require('../routes/programs') as typeof import('../routes/programs');
+const { resolveAllowedOrigins } = require('../app') as typeof import('../app');
 
 const sourceDb = new Database(sourceDbPath, { readonly: true, fileMustExist: true });
 
@@ -176,6 +178,53 @@ test('financial series is exposed in million KRW (백만원)', () => {
   );
 });
 
+test('company 2124 derived financial metrics reconcile with raw statements', () => {
+  const rows = sourceDb.prepare(`
+    SELECT fiscal_year, revenue, op_profit, liabilities, equity
+    FROM company_yearly
+    WHERE company_id = 2124 AND fiscal_year IN (2023, 2024)
+    ORDER BY fiscal_year
+  `).all() as Array<{
+    fiscal_year: number;
+    revenue: number;
+    op_profit: number;
+    liabilities: number;
+    equity: number;
+  }>;
+  assert.equal(rows.length, 2);
+  const [previous, current] = rows;
+  const expectedGrowth = (current.revenue / previous.revenue - 1) * 100;
+  const expectedMargin = current.op_profit / current.revenue * 100;
+  const expectedDebtRatio = current.liabilities / current.equity * 100;
+  const report = buildReport(2_124);
+  assert.ok(report);
+  const indicators = new Map(
+    [...report.survival_indicators, ...report.reference_indicators]
+      .map(item => [item.code, item.value]),
+  );
+  assert.ok(Math.abs(Number(indicators.get('revenue_growth')) - expectedGrowth) < 0.0001);
+  assert.ok(Math.abs(Number(indicators.get('operating_margin')) - expectedMargin) < 0.0001);
+  assert.ok(Math.abs(Number(indicators.get('debt_ratio')) - expectedDebtRatio) < 0.0001);
+});
+
+test('support episode amounts preserve one-decimal million KRW precision', () => {
+  const report = buildReport(2_124);
+  assert.ok(report);
+  const amounts = report.support_summary.episode_list
+    .map(item => item.total_amount_million)
+    .filter((value): value is number => value !== null);
+  assert.ok(amounts.includes(6.4));
+  assert.ok(amounts.includes(9.6));
+  assert.equal(report.support_summary.total_amount_million, 36);
+  assert.ok(report.follow_up_questions.some(item => item.includes('원천금액 0원')));
+  assert.ok(report.data_warnings.some(item => item.includes('NTIS 기준연도 미상 1건')));
+  assert.equal(report.support_summary.awarded_episodes, 3);
+  assert.equal(report.support_summary.rejected_or_withdrawn, 2);
+  assert.ok(report.officer_brief.lines.length > 0);
+  assert.ok(report.summary_checks.some(item => item.code === 'survival'));
+  assert.ok(report.summary_checks.some(item => item.label === '매출 규모'));
+});
+
 test('support amounts reconcile to 2,640.45억원', () => {
   const totalThousandWon = (sourceDb.prepare(`
     SELECT SUM(total_amount) AS total FROM support_episode
@@ -280,6 +329,161 @@ test('notice extraction rejects invented weights and keeps explicit scores only'
   assert.equal(program.requirements[0].weight, null);
   assert.equal(program.requirements[1].weight, 10);
   assert.equal(program.requirements[1].rule, null);
+});
+
+test('CORS origins keep local development safe and accept configured deployment origins', () => {
+  const origins = resolveAllowedOrigins(
+    'https://dive.example.com, https://dive.example.com/, javascript:alert(1), https://bad.example/path, *',
+  );
+  assert.ok(origins.includes('http://localhost:3000'));
+  assert.ok(origins.includes('http://127.0.0.1:3001'));
+  assert.ok(origins.includes('https://dive.example.com'));
+  assert.equal(origins.filter(origin => origin === 'https://dive.example.com').length, 1);
+  assert.ok(!origins.includes('*'));
+  assert.ok(!origins.includes('https://bad.example'));
+});
+
+test('company list/detail support totals use selected year and source year fallback', () => {
+  const companyId = 2_227;
+  const asOfFy = 2023;
+  // 목록·상세 지원 집계는 지원대상(선정)만 사용 — 탈락·포기는 제외
+  const expected = sourceDb.prepare(`
+    SELECT
+      COUNT(*) AS count,
+      COALESCE(SUM(total_amount), 0) AS total
+    FROM support_episode
+    WHERE company_id = ?
+      AND (result = '지원대상' OR result LIKE '%지원대상%' OR result = '선정')
+      AND (
+        (selected_date IS NOT NULL AND CAST(substr(selected_date, 1, 4) AS INTEGER) <= ?)
+        OR (selected_date IS NULL AND source_year <= ?)
+      )
+  `).get(companyId, asOfFy, asOfFy) as { count: number; total: number };
+  const leaked = sourceDb.prepare(`
+    SELECT COUNT(*) AS count
+    FROM support_episode
+    WHERE company_id = ? AND as_of_fy IS NULL AND source_year > ?
+  `).get(companyId, asOfFy) as { count: number };
+  assert.ok(leaked.count > 0, 'fixture must include a future support row with null as_of_fy');
+
+  const detail = invokeRoute(companiesRouter, 'get', '/:id', {
+    params: { id: String(companyId) },
+    query: { as_of_fy: String(asOfFy) },
+  });
+  assert.equal(detail.status, 200);
+  const detailBody = detail.body as {
+    support_episode_count: number;
+    support_total_million: number;
+  };
+  assert.equal(detailBody.support_episode_count, expected.count);
+  assert.equal(detailBody.support_total_million, Math.round(expected.total / 100) / 10);
+
+  const list = invokeRoute(companiesRouter, 'get', '/', {
+    query: { search: String(companyId), as_of_fy: String(asOfFy), limit: '200' },
+  });
+  const item = (list.body as { items: Array<{ id: string; support_episode_count: number }> })
+    .items.find(row => row.id === String(companyId));
+  assert.ok(item);
+  assert.equal(item.support_episode_count, expected.count);
+});
+
+test('company facets are read-only count/value contracts and registered before /:id', () => {
+  const facets = invokeRoute(companiesRouter, 'get', '/facets');
+  assert.equal(facets.status, 200);
+  const body = facets.body as Record<string, Array<{ value: string; count: number }>>;
+  for (const key of ['sizes', 'regions', 'biz_statuses', 'ksic_sections']) {
+    assert.ok(Array.isArray(body[key]), `${key} must be an array`);
+    assert.ok(body[key].length > 0, `${key} must not be empty`);
+    assert.ok(body[key].every(item => item.value && Number.isInteger(item.count) && item.count > 0));
+  }
+});
+
+test('program validation rejects unknown requirement types and review statuses', () => {
+  const base = {
+    title: '프로그램',
+    agency: '',
+    field: '',
+    budget: '',
+    supportPerCompany: '',
+    deadline: '',
+    targetStage: '',
+    keywords: [],
+    description: '',
+  };
+  assert.throws(
+    () => validateProgram({ ...base, reviewStatus: 'published' }),
+    /invalid reviewStatus/,
+  );
+  assert.throws(
+    () => validateProgram({ ...base, requirements: {} }),
+    /requirements must be an array/,
+  );
+  assert.throws(
+    () => validateProgram({
+      ...base,
+      requirements: [{ type: 'ranking', label: '임의 순위', reviewStatus: 'draft' }],
+    }),
+    /type is invalid/,
+  );
+  assert.throws(
+    () => validateProgram({
+      ...base,
+      requirements: [{ type: 'eligibility', label: '부산 소재', reviewStatus: 'published' }],
+    }),
+    /reviewStatus is invalid/,
+  );
+});
+
+test('support episodes preserve unknown amount as null instead of zero', () => {
+  const companyId = (sourceDb.prepare(`
+    SELECT company_id
+    FROM support_episode
+    WHERE total_amount IS NULL
+    ORDER BY company_id
+    LIMIT 1
+  `).get() as { company_id: number }).company_id;
+  const report = buildReport(companyId);
+  assert.ok(report);
+  const unknown = report.support_summary.episode_list.find(item => item.total_amount_million === null);
+  assert.ok(unknown, 'unknown support amount must stay null in the report contract');
+});
+
+test('round/comparison/simulation validation returns stable frontend-safe errors', () => {
+  const invalidDate = invokeRoute(roundsRouter, 'post', '/', {
+    body: { companyIds: [2_124], asOfDate: '2025-02-30' },
+  });
+  assert.equal(invalidDate.status, 400);
+  assert.equal((invalidDate.body as { code: string }).code, 'INVALID_AS_OF_DATE');
+
+  const missingRoundCompany = invokeRoute(roundsRouter, 'post', '/', {
+    body: { companyIds: [999_999], asOfDate: '2025-07-01' },
+  });
+  assert.equal(missingRoundCompany.status, 404);
+  assert.equal((missingRoundCompany.body as { code: string }).code, 'COMPANY_NOT_FOUND');
+
+  const invalidMetrics = invokeRoute(comparisonsRouter, 'post', '/', {
+    body: { companyIds: [2_124, 1_549], metrics: ['opaque_rank'] },
+  });
+  assert.equal(invalidMetrics.status, 400);
+  assert.equal((invalidMetrics.body as { code: string }).code, 'INVALID_METRICS');
+
+  const missingComparisonCompany = invokeRoute(comparisonsRouter, 'post', '/', {
+    body: { companyIds: [2_124, 999_999] },
+  });
+  assert.equal(missingComparisonCompany.status, 404);
+  assert.equal((missingComparisonCompany.body as { code: string }).code, 'COMPANY_NOT_FOUND');
+
+  const invalidSimulationId = invokeRoute(simulationsRouter, 'post', '/', {
+    body: { companyId: '2124oops', amountMillion: 100 },
+  });
+  assert.equal(invalidSimulationId.status, 400);
+  assert.equal((invalidSimulationId.body as { code: string }).code, 'INVALID_COMPANY_ID');
+
+  const missingSimulationCompany = invokeRoute(simulationsRouter, 'post', '/', {
+    body: { companyId: 999_999, amountMillion: 100 },
+  });
+  assert.equal(missingSimulationCompany.status, 404);
+  assert.equal((missingSimulationCompany.body as { code: string }).code, 'COMPANY_NOT_FOUND');
 });
 
 test('route contracts cover list/detail, round sorting, comparison and simulation', () => {
