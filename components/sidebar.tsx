@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { FileText, Settings, Landmark, Plus, ChevronsUpDown, Check } from "lucide-react"
+import { FileText, Settings, Plus, ChevronsUpDown, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export function Sidebar({
@@ -20,19 +20,9 @@ export function Sidebar({
   const hasProgram = programs.length > 0
 
   return (
-    <aside className="hidden w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:flex">
-      <div className="flex items-center gap-2.5 px-5 py-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-          <Landmark className="h-5 w-5" />
-        </div>
-        <div className="leading-tight">
-          <p className="text-sm font-semibold">기업선정 인텔리전스</p>
-          <p className="text-xs text-sidebar-foreground/60">공공지원사업 매칭</p>
-        </div>
-      </div>
-
+    <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:flex">
       {/* Program switcher */}
-      <div className="relative px-3 pb-2">
+      <div className="relative px-3 pb-2 pt-4">
         <p className="px-2 pb-1.5 text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/40">
           지원사업 공고
         </p>

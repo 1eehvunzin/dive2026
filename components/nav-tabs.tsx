@@ -36,10 +36,10 @@ export function NavTabs({
             className={cn(
               "relative flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors",
               disabled
-                ? "cursor-not-allowed text-muted-foreground/40"
+                ? "cursor-not-allowed text-primary-foreground/40"
                 : isActive
-                  ? "bg-secondary text-foreground"
-                  : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+                  ? "bg-primary-foreground text-primary shadow-sm"
+                  : "text-primary-foreground/75 hover:bg-primary-foreground/10 hover:text-primary-foreground",
             )}
           >
             <Icon className="h-4 w-4" />
@@ -48,7 +48,7 @@ export function NavTabs({
               <span
                 className={cn(
                   "rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
-                  isActive ? "bg-primary/20 text-primary" : "bg-secondary text-foreground",
+                  isActive ? "bg-primary/15 text-primary" : "bg-primary-foreground/20 text-primary-foreground",
                 )}
               >
                 {shortlistCount}

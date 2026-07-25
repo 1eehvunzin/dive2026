@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useMemo, useState } from "react"
-import { Bell, HelpCircle } from "lucide-react"
+import { Bell, HelpCircle, Landmark } from "lucide-react"
 import { Sidebar } from "@/components/sidebar"
 import { NavTabs } from "@/components/nav-tabs"
 import { CompanyView } from "@/components/company-view"
@@ -19,12 +19,6 @@ import {
   type HistoryEvent,
   type ViewId,
 } from "@/lib/mock-data"
-
-const viewLabels: Record<ViewId, string> = {
-  companies: "추천 기업 순위",
-  shortlist: "선정 목록",
-  history: "활동 히스토리",
-}
 
 let eventSeq = 0
 function makeEvent(type: HistoryEvent["type"], label: string, detail?: string): HistoryEvent {
@@ -132,16 +126,6 @@ export default function Page() {
   }, [])
 
   const programList = records.map((r) => ({ id: r.program.id, title: r.program.title }))
-  const showTabs = !selected && !registering
-  const crumb = selected
-    ? selected.name
-    : registering
-      ? editing
-        ? "공고 수정"
-        : "지원사업 등록"
-      : activeRecord
-        ? activeRecord.program.title
-        : "지원사업 등록"
 
   function renderMain() {
     if (selected) {
@@ -195,46 +179,57 @@ export default function Page() {
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar
-        programs={programList}
-        activeId={activeId}
-        onSwitchProgram={switchProgram}
-        onNewProgram={startNewProgram}
-      />
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur">
-          <div className="flex items-center justify-between px-6 pt-3">
-            <div className="flex min-w-0 items-center gap-2 text-sm">
-              <span className="text-muted-foreground">지원사업</span>
-              <span className="text-muted-foreground">/</span>
-              <span className="truncate font-medium text-foreground">{crumb}</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <button className="rounded-md p-2 text-muted-foreground hover:bg-secondary">
-                <HelpCircle className="h-4.5 w-4.5" />
-              </button>
-              <button className="rounded-md p-2 text-muted-foreground hover:bg-secondary">
-                <Bell className="h-4.5 w-4.5" />
-              </button>
-            </div>
+    <div className="flex min-h-screen flex-col bg-background">
+      {/* Top bar spanning full width: brand block + primary nav bar */}
+      <header className="sticky top-0 z-40 flex h-16 shrink-0">
+        <div className="hidden w-64 shrink-0 items-center gap-2.5 bg-sidebar px-5 text-sidebar-foreground lg:flex">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+            <Landmark className="h-5 w-5" />
           </div>
-          <div className="px-4 pb-1 pt-1.5">
-            {showTabs ? (
-              <NavTabs
-                active={view}
-                onNavigate={handleNavigate}
-                hasProgram={!!activeRecord}
-                shortlistCount={shortlist.length}
-              />
-            ) : (
-              <div className="h-9" />
-            )}
+          <div className="leading-tight">
+            <p className="text-sm font-semibold">기업선정 인텔리전스</p>
+            <p className="text-xs text-sidebar-foreground/60">공공지원사업 매칭</p>
           </div>
-        </header>
+        </div>
 
-        <main className="flex-1">{renderMain()}</main>
+        <div className="flex flex-1 items-center justify-between bg-primary px-4 text-primary-foreground sm:px-6">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-foreground/15 lg:hidden">
+              <Landmark className="h-4.5 w-4.5" />
+            </div>
+            <NavTabs
+              active={view}
+              onNavigate={handleNavigate}
+              hasProgram={!!activeRecord}
+              shortlistCount={shortlist.length}
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              aria-label="도움말"
+              className="rounded-md p-2 text-primary-foreground/80 transition-colors hover:bg-primary-foreground/10 hover:text-primary-foreground"
+            >
+              <HelpCircle className="h-4.5 w-4.5" />
+            </button>
+            <button
+              aria-label="알림"
+              className="rounded-md p-2 text-primary-foreground/80 transition-colors hover:bg-primary-foreground/10 hover:text-primary-foreground"
+            >
+              <Bell className="h-4.5 w-4.5" />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Body: sidebar + content */}
+      <div className="flex min-h-0 flex-1">
+        <Sidebar
+          programs={programList}
+          activeId={activeId}
+          onSwitchProgram={switchProgram}
+          onNewProgram={startNewProgram}
+        />
+        <main className="min-w-0 flex-1">{renderMain()}</main>
       </div>
 
       {selected && (
