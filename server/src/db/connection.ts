@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 export const DB_PATH = process.env.DB_PATH
-  || path.resolve(__dirname, '../../dive2026.db');
+  || path.resolve(__dirname, '../dive2026.db');
 
 let _db: Database.Database | null = null;
 
