@@ -13,7 +13,7 @@ export default function NewProgramPage() {
     <ProgramRegister
       onComplete={(p: Program) => {
         return registerProgram(p).then(() => {
-          router.push("/")
+          router.push("/dashboard")
         })
       }}
     />

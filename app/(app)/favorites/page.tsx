@@ -11,7 +11,7 @@ export default function FavoritesPage() {
   const { records, toggleShortlist, setActiveId } = useAppState()
 
   useEffect(() => {
-    if (records.length === 0) router.replace("/")
+    if (records.length === 0) router.replace("/dashboard")
   }, [records.length, router])
 
   if (records.length === 0) return null
@@ -23,7 +23,7 @@ export default function FavoritesPage() {
       onToggleShortlist={toggleShortlist}
       onBrowse={(programId) => {
         setActiveId(programId)
-        router.push("/")
+        router.push("/dashboard")
       }}
     />
   )

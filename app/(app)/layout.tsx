@@ -37,7 +37,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             </div>
             <NavTabs
               active={view}
-              onNavigate={(id) => router.push(id === "shortlist" ? "/favorites" : "/")}
+              onNavigate={(id) => router.push(id === "shortlist" ? "/favorites" : "/dashboard")}
               hasProgram={records.length > 0}
               onRequireProgram={() => router.push("/programs/new")}
               shortlistCount={totalShortlistCount}
@@ -62,7 +62,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           activeId={activeId}
           onSwitchProgram={(id) => {
             setActiveId(id)
-            router.push("/")
+            router.push("/dashboard")
           }}
           onNewProgram={() => router.push("/programs/new")}
         />

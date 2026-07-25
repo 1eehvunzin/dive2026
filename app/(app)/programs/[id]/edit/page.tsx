@@ -32,7 +32,7 @@ export default function EditProgramPage() {
       initial={record.program}
       onComplete={(p: Program) => {
         return updateProgram(record.program.id, p).then(() => {
-          router.push("/")
+          router.push("/dashboard")
         })
       }}
     />
