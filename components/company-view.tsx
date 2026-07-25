@@ -7,12 +7,13 @@ import {
   Coins,
   Target,
   Pencil,
-  ArrowUpRight,
   MapPin,
   Users,
   TrendingUp,
   Search,
   SlidersHorizontal,
+  CheckSquare,
+  Square,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { programs, companies, type Company } from "@/lib/mock-data"
@@ -90,22 +91,31 @@ function ProgramCard({ onEdit }: { onEdit: () => void }) {
   )
 }
 
-function CompanyRow({ company, rank, onSelect }: { company: Company; rank: number; onSelect: () => void }) {
+function CompanyRow({
+  company,
+  rank,
+  onSelect,
+  picked,
+  onToggle,
+}: {
+  company: Company
+  rank: number
+  onSelect: () => void
+  picked: boolean
+  onToggle: () => void
+}) {
   const revenueGrowth = Math.round(
     ((company.financials[company.financials.length - 1].revenue - company.financials[0].revenue) /
       company.financials[0].revenue) *
       100,
   )
   return (
-    <button
-      onClick={onSelect}
-      className="group flex w-full flex-col gap-4 rounded-xl border border-border bg-card p-5 text-left transition-all hover:border-primary/40 hover:shadow-md sm:flex-row sm:items-center"
-    >
+    <div className="group flex w-full flex-col gap-4 rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/40 hover:shadow-md sm:flex-row sm:items-center">
       <div className="flex w-8 shrink-0 items-center justify-center">
         <span className="text-lg font-semibold tabular-nums text-muted-foreground">{rank}</span>
       </div>
 
-      <div className="flex flex-1 items-start gap-4">
+      <button onClick={onSelect} className="flex flex-1 items-start gap-4 text-left">
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-lg font-bold text-primary">
           {company.logoSeed}
         </div>
@@ -132,7 +142,7 @@ function CompanyRow({ company, rank, onSelect }: { company: Company; rank: numbe
             </span>
           </div>
         </div>
-      </div>
+      </button>
 
       <div className="flex items-center gap-6 border-t border-border pt-3 sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
         <div className="text-right">
@@ -144,9 +154,21 @@ function CompanyRow({ company, rank, onSelect }: { company: Company; rank: numbe
           <p className="text-sm font-semibold text-foreground">{company.fundingTotal}</p>
         </div>
         <ScorePill score={company.matchScore} />
-        <ArrowUpRight className="h-5 w-5 text-muted-foreground transition-colors group-hover:text-primary" />
+        <button
+          onClick={onToggle}
+          aria-label={picked ? "선정 목록에서 제거" : "선정 목록에 추가"}
+          className={cn(
+            "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
+            picked
+              ? "border-primary/40 bg-primary/10 text-primary"
+              : "border-border text-muted-foreground hover:border-primary/40 hover:text-primary",
+          )}
+        >
+          {picked ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+          {picked ? "선정됨" : "선정"}
+        </button>
       </div>
-    </button>
+    </div>
   )
 }
 
@@ -204,7 +226,15 @@ function RegistrationForm({ onDone }: { onDone: () => void }) {
   )
 }
 
-export function CompanyView({ onSelectCompany }: { onSelectCompany: (c: Company) => void }) {
+export function CompanyView({
+  onSelectCompany,
+  shortlist,
+  onToggleShortlist,
+}: {
+  onSelectCompany: (c: Company) => void
+  shortlist: string[]
+  onToggleShortlist: (id: string) => void
+}) {
   const [editing, setEditing] = useState(false)
   const sorted = [...companies].sort((a, b) => b.matchScore - a.matchScore)
 
@@ -233,7 +263,14 @@ export function CompanyView({ onSelectCompany }: { onSelectCompany: (c: Company)
 
       <div className="mt-4 flex flex-col gap-3">
         {sorted.map((company, i) => (
-          <CompanyRow key={company.id} company={company} rank={i + 1} onSelect={() => onSelectCompany(company)} />
+          <CompanyRow
+            key={company.id}
+            company={company}
+            rank={i + 1}
+            onSelect={() => onSelectCompany(company)}
+            picked={shortlist.includes(company.id)}
+            onToggle={() => onToggleShortlist(company.id)}
+          />
         ))}
       </div>
 

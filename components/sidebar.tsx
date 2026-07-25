@@ -3,14 +3,24 @@
 import { LayoutDashboard, FileText, Building2, CheckSquare, Settings, Landmark } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-const nav = [
+export type ViewId = "programs" | "companies" | "shortlist" | "overview"
+
+const nav: { id: ViewId; label: string; icon: typeof FileText }[] = [
   { id: "programs", label: "지원사업 등록", icon: FileText },
   { id: "companies", label: "추천 기업", icon: Building2 },
   { id: "shortlist", label: "선정 목록", icon: CheckSquare },
   { id: "overview", label: "현황 대시보드", icon: LayoutDashboard },
 ]
 
-export function Sidebar({ active = "companies" }: { active?: string }) {
+export function Sidebar({
+  active = "companies",
+  onNavigate,
+  shortlistCount = 0,
+}: {
+  active?: ViewId
+  onNavigate?: (id: ViewId) => void
+  shortlistCount?: number
+}) {
   return (
     <aside className="hidden w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:flex">
       <div className="flex items-center gap-2.5 px-5 py-5">
@@ -30,6 +40,8 @@ export function Sidebar({ active = "companies" }: { active?: string }) {
           return (
             <button
               key={item.id}
+              onClick={() => onNavigate?.(item.id)}
+              aria-current={isActive ? "page" : undefined}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
                 isActive
@@ -38,7 +50,19 @@ export function Sidebar({ active = "companies" }: { active?: string }) {
               )}
             >
               <Icon className="h-4.5 w-4.5" />
-              {item.label}
+              <span className="flex-1 text-left">{item.label}</span>
+              {item.id === "shortlist" && shortlistCount > 0 && (
+                <span
+                  className={cn(
+                    "rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
+                    isActive
+                      ? "bg-sidebar-primary-foreground/20 text-sidebar-primary-foreground"
+                      : "bg-sidebar-primary/25 text-sidebar-foreground",
+                  )}
+                >
+                  {shortlistCount}
+                </span>
+              )}
             </button>
           )
         })}

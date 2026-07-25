@@ -12,6 +12,8 @@ import {
   ShieldAlert,
   CheckCircle2,
   Building2,
+  CheckSquare,
+  Square,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScoreRing, TrendBars } from "@/components/charts"
@@ -33,11 +35,15 @@ export function CompanyReport({
   onBack,
   onAsk,
   onOpenAgent,
+  picked,
+  onToggleShortlist,
 }: {
   company: Company
   onBack: () => void
   onAsk: (context: string) => void
   onOpenAgent: () => void
+  picked: boolean
+  onToggleShortlist: () => void
 }) {
   const [tab, setTab] = useState<Tab>("overview")
   const [selection, setSelection] = useState<{ text: string; x: number; y: number } | null>(null)
@@ -75,10 +81,21 @@ export function CompanyReport({
           <ArrowLeft className="h-4 w-4" />
           추천 목록으로
         </Button>
-        <Button size="sm" onClick={onOpenAgent} className="gap-1.5">
-          <Sparkles className="h-3.5 w-3.5" />
-          AI 에이전트 열기
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={picked ? "default" : "outline"}
+            size="sm"
+            onClick={onToggleShortlist}
+            className="gap-1.5"
+          >
+            {picked ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+            {picked ? "선정됨" : "선정 목록에 추가"}
+          </Button>
+          <Button size="sm" onClick={onOpenAgent} className="gap-1.5">
+            <Sparkles className="h-3.5 w-3.5" />
+            AI 에이전트 열기
+          </Button>
+        </div>
       </div>
 
       {/* Header */}
